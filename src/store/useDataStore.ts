@@ -1,18 +1,17 @@
 import { useStore } from 'zustand'
 import { createStore } from 'zustand/vanilla'
-import type { CustomerRow } from '../domain/customer'
 import { ERROR_MESSAGE } from '../constants/errorMessages'
 import { checkImportFile } from '../domain/importFile'
-import { createMockCustomers } from '../mock/customers'
-import { simulateLoad } from '../mock/simulateLoad'
-import { isAbortError } from '../worker/client'
-import type { LoadProgress } from '../worker/protocol'
+import { getImportWorker, isAbortError } from '../worker/client'
+import type { LoadProgress, Row } from '../worker/protocol'
 
-const MOCK_ROW_COUNT = 200
+// Lets the progress bar finish its animation before the screen changes
+const PROGRESS_SETTLE_MS = 300
 
 export interface Dataset {
   fileName: string
-  rows: CustomerRow[]
+  columns: string[]
+  rows: Row[]
 }
 
 export interface DataState {
@@ -26,12 +25,24 @@ export interface DataState {
 
 let loadController: AbortController | null = null
 
+const settle = (signal: AbortSignal) =>
+  new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(resolve, PROGRESS_SETTLE_MS)
+    signal.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(timer)
+        reject(signal.reason as Error)
+      },
+      { once: true },
+    )
+  })
+
 export const dataStore = createStore<DataState>()((set) => ({
   dataset: null,
   progress: null,
   error: null,
 
-  // Simulated for now: any valid file shows the same mock rows after a fake parse and analysis
   loadFile: async (file) => {
     // Checked before anything else, so a rejected file never cancels a running load
     const error = checkImportFile(file)
@@ -43,11 +54,43 @@ export const dataStore = createStore<DataState>()((set) => ({
     loadController?.abort()
     const controller = new AbortController()
     loadController = controller
-    set({ error: null })
+
+    // Collect chunks outside the store and commit once, so React renders a single update
+    const rows: Row[] = []
+    set({
+      error: null,
+      progress: {
+        stage: 'parsing',
+        bytesRead: 0,
+        totalBytes: file.size,
+        rowsProcessed: 0,
+        totalRows: 0,
+      },
+    })
 
     try {
-      await simulateLoad(file, MOCK_ROW_COUNT, controller.signal, (progress) => set({ progress }))
-      set({ dataset: { fileName: file.name, rows: createMockCustomers(MOCK_ROW_COUNT) } })
+      const { columns, rowCount } = await getImportWorker().request(
+        'load',
+        { file },
+        {
+          signal: controller.signal,
+          onProgress: (progress) => set({ progress }),
+          onChunk: (chunk) => {
+            for (const row of chunk) rows.push(row)
+          },
+        },
+      )
+      set({
+        progress: {
+          stage: 'parsing',
+          bytesRead: file.size,
+          totalBytes: file.size,
+          rowsProcessed: rowCount,
+          totalRows: rowCount,
+        },
+      })
+      await settle(controller.signal)
+      set({ dataset: { fileName: file.name, columns, rows } })
     } catch (err) {
       if (isAbortError(err)) return
       set({ error: err instanceof Error ? err.message : ERROR_MESSAGE.FILE_READ_FAILED })

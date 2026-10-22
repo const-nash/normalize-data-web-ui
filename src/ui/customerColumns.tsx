@@ -1,9 +1,15 @@
-import { CUSTOMER_COLUMNS } from '../domain/customer'
-import type { CustomerColumn, CustomerRow } from '../domain/customer'
+import type { CustomerColumn } from '../domain/customer'
+import type { Row } from '../worker/protocol'
 import type { TableColumn } from './Table'
 
-// size: minimum width in spacing steps; priority: higher stays visible longer
-const LAYOUT: Record<CustomerColumn, { size: number; priority: number }> = {
+interface ColumnLayout {
+  // Minimum width in spacing steps
+  size: number
+  // Higher stays visible longer
+  priority: number
+}
+
+const LAYOUT: Record<CustomerColumn, ColumnLayout> = {
   customer_id: { size: 28, priority: 100 },
   email: { size: 52, priority: 90 },
   first_name: { size: 32, priority: 80 },
@@ -14,10 +20,22 @@ const LAYOUT: Record<CustomerColumn, { size: number; priority: number }> = {
   signup_date: { size: 32, priority: 30 },
 }
 
-export const customerColumns: Array<TableColumn<CustomerRow>> = CUSTOMER_COLUMNS.map((key) => ({
-  id: key,
-  header: key,
-  cell: (row) => row[key],
-  size: LAYOUT[key].size,
-  priority: LAYOUT[key].priority,
-}))
+// Columns the spec does not know stay visible only while there is room
+const UNKNOWN_COLUMN: ColumnLayout = { size: 32, priority: 0 }
+
+const layoutFor = (name: string) =>
+  LAYOUT[name.trim().toLowerCase() as CustomerColumn] ?? UNKNOWN_COLUMN
+
+// Builds table columns from the file header, in file order. Rows stay positional arrays.
+export function columnsForHeader(header: readonly string[]): Array<TableColumn<Row>> {
+  return header.map((name, index) => {
+    const { size, priority } = layoutFor(name)
+    return {
+      id: `${index}:${name}`,
+      header: name,
+      cell: (row) => row[index] ?? '',
+      size,
+      priority,
+    }
+  })
+}

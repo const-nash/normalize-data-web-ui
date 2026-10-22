@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 import { ERROR_MESSAGE } from '../constants/errorMessages'
-import { createNaiveParser } from './naiveParser'
+import { parseCsvBlob } from '../domain/csv'
 import type {
   Chunk,
   ClientMessage,
@@ -35,60 +35,32 @@ const post = (message: WorkerMessage, transfer: Transferable[] = []) =>
 
 const handlers: Handlers = {
   async load({ file }, { signal, progress, chunk }) {
-    const parser = createNaiveParser()
-    let columns: string[] | null = null
     let batch: Row[] = []
     let rowCount = 0
-
-    const onRow = (row: Row) => {
-      if (!columns) {
-        columns = row
-        return
-      }
-      batch.push(row)
-      rowCount++
-      if (batch.length === CHUNK_SIZE) {
-        chunk(batch)
-        batch = []
-      }
-    }
-
-    // Stream the file instead of reading it whole: bounded memory and cheap cancellation checks
-    const reader = file.stream().getReader()
-    const decoder = new TextDecoder()
-    let bytesRead = 0
     let lastReport = 0
 
-    try {
-      for (;;) {
-        signal.throwIfAborted()
-        // Chunks must be processed in order, so sequential awaits are intended
-        // oxlint-disable-next-line no-await-in-loop
-        const { done, value } = await reader.read()
-        if (done) break
-
-        bytesRead += value.byteLength
-        parser.push(decoder.decode(value, { stream: true }), onRow)
-
-        const now = performance.now()
-        if (now - lastReport >= PROGRESS_INTERVAL_MS) {
-          lastReport = now
-          progress({
-            stage: 'parsing',
-            bytesRead,
-            totalBytes: file.size,
-            rowsProcessed: rowCount,
-            totalRows: 0,
-          })
+    // The parser emits rows per read chunk; regroup them into fixed-size batches for transfer
+    const onRows = (rows: Row[]) => {
+      for (const row of rows) {
+        batch.push(row)
+        if (batch.length === CHUNK_SIZE) {
+          chunk(batch)
+          batch = []
         }
       }
-      parser.push(decoder.decode(), onRow)
-      parser.flush(onRow)
-    } finally {
-      reader.releaseLock()
+      rowCount += rows.length
     }
 
-    if (!columns) throw new Error(ERROR_MESSAGE.FILE_NO_HEADER)
+    const onProgress = (bytesRead: number, totalBytes: number) => {
+      const now = performance.now()
+      if (now - lastReport < PROGRESS_INTERVAL_MS) return
+      lastReport = now
+      progress({ stage: 'parsing', bytesRead, totalBytes, rowsProcessed: rowCount, totalRows: 0 })
+    }
+
+    const { columns } = await parseCsvBlob(file, { signal, onRows, onProgress })
+
+    if (columns.length === 0) throw new Error(ERROR_MESSAGE.FILE_NO_HEADER)
     if (batch.length > 0) chunk(batch)
 
     return { columns, rowCount }

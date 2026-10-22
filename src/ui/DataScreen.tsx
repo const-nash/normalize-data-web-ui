@@ -1,10 +1,12 @@
 import type { Dataset } from '../store/useDataStore'
 import { useDataStore } from '../store/useDataStore'
-import { customerColumns } from './customerColumns'
+import { useMemo } from 'react'
+import { columnsForHeader } from './customerColumns'
 import { Table } from './Table'
 
 export function DataScreen({ dataset }: { dataset: Dataset }) {
   const reset = useDataStore((s) => s.reset)
+  const columns = useMemo(() => columnsForHeader(dataset.columns), [dataset.columns])
 
   return (
     <div className="flex h-screen flex-col gap-4 p-4">
@@ -24,7 +26,7 @@ export function DataScreen({ dataset }: { dataset: Dataset }) {
         </button>
       </header>
       <main className="min-h-0 flex-1" style={{ viewTransitionName: 'app-surface' }}>
-        <Table rows={dataset.rows} columns={customerColumns} label="Customers" className="h-full" />
+        <Table rows={dataset.rows} columns={columns} label="Customers" className="h-full" />
       </main>
     </div>
   )
