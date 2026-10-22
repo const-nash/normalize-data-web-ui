@@ -4,9 +4,12 @@ import { formatMessage } from './formatMessage'
 
 describe('formatMessage', () => {
   it('fills placeholders', () => {
-    expect(formatMessage(ERROR_MESSAGE.COUNTRY_INVALID, { value: 'Germany', example: 'DE' })).toBe(
-      'Country "Germany" should be a 2-letter code like DE.',
-    )
+    expect(
+      formatMessage('Country "{value}" should be like {example}.', {
+        value: 'Germany',
+        example: 'DE',
+      }),
+    ).toBe('Country "Germany" should be like DE.')
   })
 
   it('formats numbers', () => {

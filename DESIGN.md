@@ -9,6 +9,7 @@ Functional core, imperative shell.
 - `src/ui`: React components. They read from the store through selectors and call store actions.
 - `src/domain`: pure types and rules. For now the `CustomerRow` type, the column list and the import file check.
 - `src/domain/csv`: chunked CSV parser on PapaParse. `createCsvChunkParser` takes text slices and completes rows split between them. `parseCsvStream` and `parseCsvBlob` read bytes with a streaming `TextDecoder`, so characters split between chunks stay intact. The module knows nothing about workers or threads. PapaParse's own file reader and worker mode are not used: the file reader decodes each byte slice separately (breaks multi-byte characters) and needs `FileReader`, which Node lacks.
+- `src/domain/rules`: column rules. `columnRules.ts` has one rule per column: it takes a raw value and returns the most important issue or null, with a suggested value for safe and suggested fixes. `issueTypes.ts` is the issue catalog (column, title, explanation, good example, fix kind). Helpers parse dates, countries and amounts. Uniqueness of customer_id and email is checked across rows later by the duplicate index.
 - `src/constants`: shared constants: file extensions, byte sizes and all error texts. Error texts are templates with `{name}` placeholders, filled in by `formatMessage`. Placeholder names are inferred from the template, so a missing or extra parameter is a type error.
 
 ### Grid
@@ -73,6 +74,15 @@ Why: 200,000 rows fit easily in main thread memory. Edits, undo and index based 
 - Supported extensions: csv, tsv, txt. Empty files and files above 100 MB are rejected. The check runs in the store for both the file picker and drag and drop, because drag and drop ignores the `accept` attribute.
 - The delimiter (comma, semicolon, tab or pipe) and line break are detected from the first 64 KB. Empty lines are skipped. Rows with a different number of fields are kept as they are, so validation can report them.
 - The worker parses with the PapaParse module (`src/domain/csv`) and regroups rows into batches of 5,000 for transfer.
+
+### Validation assumptions
+
+- One issue per cell, the most important one. Missing beats format.
+- Dates: accepted inputs are YYYY-MM-DD, year first with `/` `.` `-`, and day or month first with a 4-digit year. A part above 12 must be the day. If both parts are 12 or less and differ (03/04/2024), we assume day/month, the European order, and mark it as suggested. Two-digit years and month names are not recognized.
+- Countries: valid codes are the 249 ISO 3166-1 alpha-2 codes. Names in English, German, French, Spanish and Italian map to codes, plus a short alias list (USA, UK, Holland, Czech Republic). Case, spaces and dots in a code are a safe fix. A name is a suggested fix. Anything else stays an issue.
+- Amounts: currency signs and codes are removed as a safe fix. A comma with 1 or 2 digits after it is a decimal comma. Commas between groups of 3 digits are thousands separators. `1.234,56` is read as 1234.56. Separator changes are suggested fixes. Negative amounts need user input.
+- Email: practical format check (name, @, domain with a dot). Not full RFC 5322.
+- Plans and names: case and surrounding spaces are safe fixes.
 
 ## Dependencies
 
