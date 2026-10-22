@@ -10,6 +10,7 @@ Functional core, imperative shell.
 - `src/domain`: pure types and rules. For now the `CustomerRow` type, the column list and the import file check.
 - `src/domain/csv`: chunked CSV parser on PapaParse. `createCsvChunkParser` takes text slices and completes rows split between them. `parseCsvStream` and `parseCsvBlob` read bytes with a streaming `TextDecoder`, so characters split between chunks stay intact. The module knows nothing about workers or threads. PapaParse's own file reader and worker mode are not used: the file reader decodes each byte slice separately (breaks multi-byte characters) and needs `FileReader`, which Node lacks.
 - `src/domain/rules`: column rules. `columnRules.ts` has one rule per column: it takes a raw value and returns the most important issue or null, with a suggested value for safe and suggested fixes. `issueTypes.ts` is the issue catalog (column, title, explanation, good example, fix kind). Helpers parse dates, countries and amounts. Uniqueness of customer_id and email is checked across rows later by the duplicate index.
+- `src/domain/validation.ts`: validates all rows. Maps the header to spec columns, builds the duplicate indexes for customer_id and email, runs the column rules and sorts each row into valid, fixable or manual. A row is fixable when every issue has a suggested value; suggested fixes are confirmed through a preview before they are applied. It is a generator, so the worker can pause between slices and handle cancel.
 - `src/constants`: shared constants: file extensions, byte sizes and all error texts. Error texts are templates with `{name}` placeholders, filled in by `formatMessage`. Placeholder names are inferred from the template, so a missing or extra parameter is a type error.
 
 ### Grid
@@ -35,9 +36,10 @@ Load flow:
 
 1. The store checks the extension and size, then sends the `File` to the worker. A `File` is a handle, so nothing is copied.
 2. The worker reads the file as a stream and parses it chunk by chunk. It reports progress at most every 100 ms.
-3. Rows go back as `string[]` arrays in chunks of 5,000.
-4. The store collects the chunks outside of React state and commits the dataset once at the end.
-5. Starting a new load cancels the previous one. A cancelled load never replaces the current dataset.
+3. Rows go back as `string[]` arrays in chunks of 5,000 while parsing.
+4. The worker then validates in slices of 5,000 rows (stage `validating`) and sends the issues in chunks of 5,000. Each issue is `{ row, column, type, suggestion }`; with the original cell value this is enough to preview a fix. Row statuses go back as one `Uint8Array`, transferred without copying. Spec columns missing from the file are reported once for the file, not per row.
+5. The store collects the chunks outside of React state and commits the dataset once at the end.
+6. Starting a new load cancels the previous one. A cancelled load never replaces the current dataset.
 
 ## ADR: parse in a worker, keep the dataset on the main thread
 
@@ -63,7 +65,8 @@ Why: 200,000 rows fit easily in main thread memory. Edits, undo and index based 
 ## Performance approach
 
 - Parsing runs in the worker. The file is streamed, not read into one string.
-- Chunks of 5,000 rows. Measured in Node `worker_threads` with a 200,000 row file (13 MB): load takes about 90 ms, each chunk is handled in under 1 ms on the main thread, and the longest main thread stall is about 2 ms.
+- Chunks of 5,000 rows. Measured in Node with 200,000 messy rows: parsing about 180 ms, validation about 340 ms, the longest main thread stall about 16 ms with 10,000 issues per chunk (now 5,000).
+- Earlier measurement before validation existed: in Node `worker_threads` with a 200,000 row file (13 MB): load takes about 90 ms, each chunk is handled in under 1 ms on the main thread, and the longest main thread stall is about 2 ms.
 - Progress messages are throttled to one per 100 ms.
 - Files above 100 MB are rejected. Scaling path: keep the dataset in the worker and fetch row windows, or store cells in a columnar binary format.
 - The grid is virtualized with TanStack Virtual and fixed row heights.

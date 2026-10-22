@@ -2,16 +2,21 @@ import { useStore } from 'zustand'
 import { createStore } from 'zustand/vanilla'
 import { ERROR_MESSAGE } from '../constants/errorMessages'
 import { checkImportFile } from '../domain/importFile'
+import type { IssueRecord, ValidationSummary } from '../domain/validation'
 import { getImportWorker, isAbortError } from '../worker/client'
 import type { LoadProgress, Row } from '../worker/protocol'
 
 // Lets the progress bar finish its animation before the screen changes
 const PROGRESS_SETTLE_MS = 300
 
-export interface Dataset {
+export interface Dataset extends ValidationSummary {
   fileName: string
   columns: string[]
   rows: Row[]
+  // Every issue with its row, column and suggested value: enough to preview each fix
+  issues: IssueRecord[]
+  // ROW_STATUS per row: valid, fixable after review, or manual
+  rowStatus: Uint8Array
 }
 
 export interface DataState {
@@ -57,6 +62,7 @@ export const dataStore = createStore<DataState>()((set) => ({
 
     // Collect chunks outside the store and commit once, so React renders a single update
     const rows: Row[] = []
+    const issues: IssueRecord[] = []
     set({
       error: null,
       progress: {
@@ -69,20 +75,21 @@ export const dataStore = createStore<DataState>()((set) => ({
     })
 
     try {
-      const { columns, rowCount } = await getImportWorker().request(
+      const { rowCount, ...result } = await getImportWorker().request(
         'load',
         { file },
         {
           signal: controller.signal,
           onProgress: (progress) => set({ progress }),
           onChunk: (chunk) => {
-            for (const row of chunk) rows.push(row)
+            if (chunk.kind === 'rows') for (const row of chunk.rows) rows.push(row)
+            else for (const issue of chunk.issues) issues.push(issue)
           },
         },
       )
       set({
         progress: {
-          stage: 'parsing',
+          stage: 'validating',
           bytesRead: file.size,
           totalBytes: file.size,
           rowsProcessed: rowCount,
@@ -90,7 +97,7 @@ export const dataStore = createStore<DataState>()((set) => ({
         },
       })
       await settle(controller.signal)
-      set({ dataset: { fileName: file.name, columns, rows } })
+      set({ dataset: { fileName: file.name, rows, issues, ...result } })
     } catch (err) {
       if (isAbortError(err)) return
       set({ error: err instanceof Error ? err.message : ERROR_MESSAGE.FILE_READ_FAILED })

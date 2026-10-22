@@ -4,6 +4,8 @@
 // Every request has an id. For that id the worker may send any number of `progress` and
 // `chunk` messages, then exactly one `result` or `error`. `cancel` aborts a request.
 
+import type { IssueRecord, ValidationSummary } from '../domain/validation'
+
 export type Row = string[]
 
 export interface LoadProgress {
@@ -15,9 +17,14 @@ export interface LoadProgress {
   totalRows: number
 }
 
-export interface LoadResult {
+// Rows are streamed while parsing, issues after validation
+export type LoadChunk = { kind: 'rows'; rows: Row[] } | { kind: 'issues'; issues: IssueRecord[] }
+
+export interface LoadResult extends ValidationSummary {
   columns: string[]
   rowCount: number
+  // ROW_STATUS per row, transferred without copying
+  rowStatus: Uint8Array
 }
 
 interface MethodSpec<P, R, G = never, C = never> {
@@ -28,7 +35,7 @@ interface MethodSpec<P, R, G = never, C = never> {
 }
 
 export interface WorkerMethods {
-  load: MethodSpec<{ file: File }, LoadResult, LoadProgress, Row[]>
+  load: MethodSpec<{ file: File }, LoadResult, LoadProgress, LoadChunk>
 }
 
 export type Method = keyof WorkerMethods

@@ -3,9 +3,8 @@ import { useDataStore } from '../store/useDataStore'
 import type { LoadProgress } from '../worker/protocol'
 import { Dropzone } from './Dropzone'
 
-// Share of the bar for parsing; validation fills the rest, so the bar never jumps back.
-// Validation is not built yet, so parsing fills the whole bar for now.
-const PARSING_SHARE = 1
+// Share of the bar for parsing; validation fills the rest, so the bar never jumps back
+const PARSING_SHARE = 0.6
 
 function overallFraction({ stage, bytesRead, totalBytes, rowsProcessed, totalRows }: LoadProgress) {
   const parsed = totalBytes > 0 ? bytesRead / totalBytes : 0
