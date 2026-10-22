@@ -1,28 +1,30 @@
 import { useCallback, useMemo, useState } from 'react'
 import type { FixMode } from '../domain/autoFix'
-import type { Dataset } from '../store/useDataStore'
 import { useDataStore } from '../store/useDataStore'
 import { AutoFixDialog } from './AutoFixDialog'
 import { columnsForDataset } from './customerColumns'
 import { FilterBar } from './FilterBar'
 import { IssuesOverview } from './IssuesOverview'
 import { Table } from './Table'
+import { useShownDataset } from './useShownDataset'
 
 const secondaryButton =
   'shrink-0 rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium transition-colors hover:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none dark:border-zinc-700 dark:hover:bg-zinc-800'
 
-export function DataScreen({ dataset }: { dataset: Dataset }) {
+export function DataScreen() {
+  const dataset = useShownDataset()
   const reset = useDataStore((s) => s.reset)
   const undo = useDataStore((s) => s.undo)
   const applyAutoFix = useDataStore((s) => s.applyAutoFix)
   const editCell = useDataStore((s) => s.editCell)
+  const pendingEdits = useDataStore((s) => s.pendingEdits)
   const history = useDataStore((s) => s.history)
   const lastChange = history.at(-1)?.label
   const visibleRows = useDataStore((s) => s.visibleRows)
   const [dialogOpen, setDialogOpen] = useState(false)
   const columns = useMemo(
-    () => columnsForDataset(dataset, history, editCell),
-    [dataset, history, editCell],
+    () => columnsForDataset(dataset, history, editCell, pendingEdits),
+    [dataset, history, editCell, pendingEdits],
   )
   const getRow = useCallback((index: number) => visibleRows[index], [visibleRows])
 
@@ -48,7 +50,12 @@ export function DataScreen({ dataset }: { dataset: Dataset }) {
             {lastChange}
           </span>
           {lastChange && (
-            <button type="button" onClick={undo} className={secondaryButton}>
+            <button
+              type="button"
+              onClick={undo}
+              disabled={pendingEdits.length > 0}
+              className={`${secondaryButton} disabled:cursor-wait disabled:opacity-50`}
+            >
               Undo
             </button>
           )}
@@ -57,9 +64,9 @@ export function DataScreen({ dataset }: { dataset: Dataset }) {
           </button>
         </div>
       </header>
-      <FilterBar dataset={dataset} />
+      <FilterBar />
       <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
-        <IssuesOverview dataset={dataset} onAutoFix={() => setDialogOpen(true)} />
+        <IssuesOverview onAutoFix={() => setDialogOpen(true)} />
         <main
           className="relative min-h-64 min-w-0 flex-1"
           style={{ viewTransitionName: 'app-surface' }}
@@ -78,12 +85,7 @@ export function DataScreen({ dataset }: { dataset: Dataset }) {
           )}
         </main>
       </div>
-      <AutoFixDialog
-        dataset={dataset}
-        open={dialogOpen}
-        onClose={() => setDialogOpen(false)}
-        onApply={handleApply}
-      />
+      <AutoFixDialog open={dialogOpen} onClose={() => setDialogOpen(false)} onApply={handleApply} />
     </div>
   )
 }

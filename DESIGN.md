@@ -88,7 +88,9 @@ Considered, not built yet:
 
 ## Performance approach
 
-- Cell edit, measured on 200,000 rows: the first edit builds the duplicate index on the main thread (about 40 ms), later edits take 5 to 15 ms, undo about 1 ms. Issue arrays are copied with the row's issues replaced, instead of revalidating all rows.
+- Large data is never passed as React props. Components read the dataset from the store through selectors. In development React 19 diffs changed props for its performance tracks; passing the dataset (200,000 rows, typed arrays) as a prop made each edit block the page for 2.5 s in dev mode, while production was unaffected. Found with a CPU profile in headless Chrome.
+
+- Cell edit, measured on 200,000 rows: about 0.3 ms with `toSpliced` replacing the row's issues (spreading the 367,000-item array cost 5 to 15 ms). The duplicate index (about 55 ms) is built with `requestIdleCallback` after load and after bulk changes, not during an edit. A saved cell shows the new value with a spinner at once; revalidation runs after the next paint, and edits run in order.
 
 - Automatic fix on the main thread, measured on 200,000 rows with 275,000 fixes: about 42 ms, undo about 10 ms. Every suggested value passes its rule (tested), so fixed issues are removed and counts recomputed instead of running the rules again. Changed cells are a `Uint8Array` mask; old values are found by binary search in the history patches.
 

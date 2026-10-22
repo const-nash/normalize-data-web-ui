@@ -165,7 +165,7 @@ export function replaceRowIssues(
   statusCounts[statusKey(status)]++
 
   return {
-    issues: [...issues.slice(0, start), ...rowIssues, ...issues.slice(end)],
+    issues: issues.toSpliced(start, end - start, ...rowIssues),
     issueOffsets: nextOffsets,
     rowStatus: nextStatus,
     statusCounts,

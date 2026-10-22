@@ -4,6 +4,7 @@ import { QUICK_FILTER } from '../domain/filter'
 import type { QuickFilter } from '../domain/filter'
 import { useDataStore } from '../store/useDataStore'
 import type { Dataset } from '../store/useDataStore'
+import { useShownDataset } from './useShownDataset'
 
 const SEARCH_DEBOUNCE_MS = 250
 
@@ -29,7 +30,8 @@ const OPTIONS: QuickFilterOption[] = [
   { value: QUICK_FILTER.VALID, label: 'Only valid', count: (c) => c.valid },
 ]
 
-export function FilterBar({ dataset }: { dataset: Dataset }) {
+export function FilterBar() {
+  const dataset = useShownDataset()
   const quickFilter = useDataStore((s) => s.quickFilter)
   const visibleCount = useDataStore((s) => s.visibleRows.length)
   const setSearch = useDataStore((s) => s.setSearch)

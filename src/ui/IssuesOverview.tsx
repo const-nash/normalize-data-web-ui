@@ -3,6 +3,7 @@ import { ISSUE_TYPES } from '../domain/rules/issueTypes'
 import type { IssueId, IssueType } from '../domain/rules/issueTypes'
 import { useDataStore } from '../store/useDataStore'
 import type { Dataset } from '../store/useDataStore'
+import { useShownDataset } from './useShownDataset'
 
 interface IssueGroup {
   title: string
@@ -24,18 +25,23 @@ function groupIssues(issueCounts: Dataset['issueCounts']): IssueGroup[] {
 }
 
 interface IssuesOverviewProps {
-  dataset: Dataset
   onAutoFix: () => void
 }
 
-export function IssuesOverview({ dataset, onAutoFix }: IssuesOverviewProps) {
+export function IssuesOverview({ onAutoFix }: IssuesOverviewProps) {
+  const dataset = useShownDataset()
   const issueType = useDataStore((s) => s.issueType)
   const setIssueType = useDataStore((s) => s.setIssueType)
   const { statusCounts, issueCounts, missingColumns } = dataset
   const groups = useMemo(() => groupIssues(issueCounts), [issueCounts])
+  // Every issue of a safe or suggested type has a suggested value (see the column rule tests)
   const fixableValues = useMemo(
-    () => dataset.issues.reduce((sum, issue) => sum + (issue.suggestion === undefined ? 0 : 1), 0),
-    [dataset.issues],
+    () =>
+      (Object.entries(issueCounts) as Array<[IssueId, number]>).reduce(
+        (sum, [id, count]) => sum + (ISSUE_TYPES[id].fixKind === 'manual' ? 0 : count),
+        0,
+      ),
+    [issueCounts],
   )
 
   return (

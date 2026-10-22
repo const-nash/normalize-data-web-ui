@@ -2,12 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { FIX_MODE, planAutoFix } from '../domain/autoFix'
 import type { FixMode } from '../domain/autoFix'
 import { ISSUE_TYPES } from '../domain/rules/issueTypes'
-import type { Dataset } from '../store/useDataStore'
+import { useShownDataset } from './useShownDataset'
 
 const PREVIEW_LIMIT = 100
 
 interface AutoFixDialogProps {
-  dataset: Dataset
   open: boolean
   onClose: () => void
   onApply: (mode: FixMode) => void
@@ -16,7 +15,8 @@ interface AutoFixDialogProps {
 const shown = (value: string) => (value === '' ? 'empty' : value)
 
 // Native <dialog>: focus trap, Escape and the backdrop come from the browser
-export function AutoFixDialog({ dataset, open, onClose, onApply }: AutoFixDialogProps) {
+export function AutoFixDialog({ open, onClose, onApply }: AutoFixDialogProps) {
+  const dataset = useShownDataset()
   const dialogRef = useRef<HTMLDialogElement>(null)
   const [mode, setMode] = useState<FixMode>(FIX_MODE.CLEAN_ROWS)
 

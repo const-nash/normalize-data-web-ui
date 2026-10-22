@@ -53,3 +53,29 @@ export function IssueCell({ value, issue, original }: IssueCellProps) {
     </span>
   )
 }
+
+// A saved value that is still being checked
+export function PendingCell({ value }: { value: string }) {
+  return (
+    <span className="flex min-w-0 items-center gap-2 text-zinc-500 dark:text-zinc-400">
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        fill="none"
+        className="size-4 shrink-0 animate-spin text-indigo-500 dark:text-indigo-400"
+      >
+        <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity="0.25" strokeWidth="3" />
+        <path
+          d="M21 12a9 9 0 0 0-9-9"
+          stroke="currentColor"
+          strokeWidth="3"
+          strokeLinecap="round"
+        />
+      </svg>
+      <span className="truncate">{value}</span>
+      <span className="sr-only" aria-live="polite">
+        Saving and checking
+      </span>
+    </span>
+  )
+}

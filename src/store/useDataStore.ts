@@ -39,6 +39,12 @@ interface HistoryEntry {
   changed: Uint8Array
 }
 
+export interface PendingEdit {
+  row: number
+  column: number
+  value: string
+}
+
 export interface ViewState {
   search: string
   quickFilter: QuickFilter
@@ -51,6 +57,8 @@ export interface DataState extends ViewState {
   // The grid renders `visibleRows`, indices into dataset.rows
   visibleRows: Uint32Array
   history: HistoryEntry[]
+  // Saved edits that are still being revalidated, shown with a saving state
+  pendingEdits: PendingEdit[]
   progress: LoadProgress | null
   error: string | null
   setSearch: (search: string) => void
@@ -67,8 +75,36 @@ export interface DataState extends ViewState {
 let loadController: AbortController | null = null
 // Built on the first search, not part of reactive state
 let searchIndex: string[] | null = null
-// Built on the first edit, kept in sync by edits, dropped when rows change in other ways
+// Built when the page is idle (or on the first edit), kept in sync by edits, dropped when rows
+// change in other ways
 let duplicateIndexes: DuplicateIndexes | null = null
+// Edits run one after another
+let editQueue = Promise.resolve()
+// A spinner that disappears within a frame reads as a glitch, so it stays at least this long
+const MIN_SAVING_MS = 400
+
+// Runs after the browser has painted the current state, so pending feedback shows first
+const afterPaint = (fn: () => void) =>
+  new Promise<void>((resolve) => {
+    const run = () =>
+      setTimeout(() => {
+        fn()
+        resolve()
+      }, 0)
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run)
+    else run()
+  })
+
+// Prepares the duplicate index in idle time, so the first edit does not pay for it
+function prepareDuplicateIndexes(dataset: Dataset, current: () => Dataset | null) {
+  const build = () => {
+    if (current() === dataset && !duplicateIndexes) {
+      duplicateIndexes = buildDuplicateIndexes(dataset.columns, dataset.rows)
+    }
+  }
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(build, { timeout: 2000 })
+  else setTimeout(build, 0)
+}
 
 const VIEW_RESET: ViewState = { search: '', quickFilter: QUICK_FILTER.ALL, issueType: null }
 
@@ -124,6 +160,41 @@ export const dataStore = createStore<DataState>()((set, get) => {
     // The chosen issue type may be gone after a fix
     if (view.issueType && !dataset.issueCounts[view.issueType]) view = { ...view, issueType: null }
     set({ dataset, history, issueType: view.issueType, visibleRows: computeView(dataset, view) })
+    prepareDuplicateIndexes(dataset, () => get().dataset)
+  }
+
+  const runEdit = ({ row, column, value }: PendingEdit) => {
+    const { dataset, history } = get()
+    if (!dataset) return
+    duplicateIndexes ??= buildDuplicateIndexes(dataset.columns, dataset.rows)
+    const result = editCell(
+      {
+        header: dataset.columns,
+        rows: dataset.rows,
+        validation: dataset,
+        indexes: duplicateIndexes,
+      },
+      row,
+      column,
+      value,
+    )
+    if (!result) return
+
+    const changed = dataset.changed.slice()
+    changed[row * dataset.columns.length + column] = 1
+    const entry: HistoryEntry = {
+      label: `Edited ${dataset.columns[column]} in row ${(row + 1).toLocaleString()}`,
+      patches: [result.patch],
+      validation: validationOf(dataset),
+      changed: dataset.changed,
+    }
+    if (searchIndex) searchIndex[row] = buildSearchIndex([result.rows[row]])[0]
+    // The visible rows stay as they are, so an edited row does not jump away from the user.
+    // Filters apply again on the next filter change.
+    set({
+      dataset: { ...dataset, ...result.validation, rows: result.rows, changed },
+      history: [...history, entry],
+    })
   }
 
   return {
@@ -131,6 +202,7 @@ export const dataStore = createStore<DataState>()((set, get) => {
     ...VIEW_RESET,
     visibleRows: new Uint32Array(),
     history: [],
+    pendingEdits: [],
     progress: null,
     error: null,
 
@@ -159,42 +231,26 @@ export const dataStore = createStore<DataState>()((set, get) => {
       return fixes.length
     },
 
+    // Shows the new value with a saving state at once, then revalidates after the next paint
     editCell: (row, column, value) => {
-      const { dataset, history } = get()
-      if (!dataset) return
-      duplicateIndexes ??= buildDuplicateIndexes(dataset.columns, dataset.rows)
-      const result = editCell(
-        {
-          header: dataset.columns,
-          rows: dataset.rows,
-          validation: dataset,
-          indexes: duplicateIndexes,
-        },
-        row,
-        column,
-        value,
-      )
-      if (!result) return
+      const edit: PendingEdit = { row, column, value }
+      const started = performance.now()
+      set({ pendingEdits: [...get().pendingEdits, edit] })
+      const clearPending = () =>
+        set({ pendingEdits: get().pendingEdits.filter((pending) => pending !== edit) })
 
-      const changed = dataset.changed.slice()
-      changed[row * dataset.columns.length + column] = 1
-      const entry: HistoryEntry = {
-        label: `Edited ${dataset.columns[column]} in row ${(row + 1).toLocaleString()}`,
-        patches: [result.patch],
-        validation: validationOf(dataset),
-        changed: dataset.changed,
-      }
-      if (searchIndex) searchIndex[row] = buildSearchIndex([result.rows[row]])[0]
-      // The visible rows stay as they are, so an edited row does not jump away from the user.
-      // Filters apply again on the next filter change.
-      set({
-        dataset: { ...dataset, ...result.validation, rows: result.rows, changed },
-        history: [...history, entry],
-      })
+      editQueue = editQueue.then(() =>
+        afterPaint(() => {
+          runEdit(edit)
+          // The data is already saved; only the spinner waits, not the next edit
+          setTimeout(clearPending, Math.max(0, MIN_SAVING_MS - (performance.now() - started)))
+        }),
+      )
     },
 
     undo: () => {
-      const { dataset, history } = get()
+      const { dataset, history, pendingEdits } = get()
+      if (pendingEdits.length > 0) return
       const entry = history.at(-1)
       if (!dataset || !entry) return
       const { rows } = applyPatches(dataset.rows, entry.patches, true)
@@ -270,6 +326,7 @@ export const dataStore = createStore<DataState>()((set, get) => {
           ...VIEW_RESET,
           visibleRows: computeView(dataset, VIEW_RESET),
         })
+        prepareDuplicateIndexes(dataset, () => get().dataset)
       } catch (err) {
         if (isAbortError(err)) return
         set({ error: err instanceof Error ? err.message : ERROR_MESSAGE.FILE_READ_FAILED })
