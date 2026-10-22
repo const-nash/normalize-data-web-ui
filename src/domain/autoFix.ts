@@ -23,13 +23,19 @@ interface PlanInput {
   issues: readonly IssueRecord[]
 }
 
-// Every issue of the given type that has a suggested value, as a fix with before and after
-export function planAutoFix({ columns, rows, issues }: PlanInput, issueType: IssueId) {
+// Every issue of the given type that has a suggested value, as a fix with before and after.
+// With a row mask (for example the rows matching a search) only those rows are fixed.
+export function planAutoFix(
+  { columns, rows, issues }: PlanInput,
+  issueType: IssueId,
+  rowMask: Uint8Array | null = null,
+) {
   const { positions } = mapColumns(columns)
   const fixes: PlannedFix[] = []
   for (let index = 0; index < issues.length; index++) {
     const issue = issues[index]
     if (issue.type !== issueType || issue.suggestion === undefined) continue
+    if (rowMask && rowMask[issue.row] === 0) continue
     const column = positions.get(issue.column)
     if (column === undefined) continue
     fixes.push({

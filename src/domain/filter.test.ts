@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { QUICK_FILTER, buildSearchIndex, filterRows, normalizeQuery, rowsWithIssue } from './filter'
+import {
+  QUICK_FILTER,
+  buildSearchIndex,
+  filterRows,
+  normalizeQuery,
+  rowsWithIssue,
+  searchMask,
+  summarizeRows,
+} from './filter'
 import { ROW_STATUS } from './validation'
 
 const rows = [
@@ -65,5 +73,22 @@ describe('rowsWithIssue', () => {
       rowMask,
     })
     expect([...result]).toEqual([1, 3])
+  })
+})
+
+describe('summarizeRows', () => {
+  it('counts rows and issues only for rows matching the search', () => {
+    const issues = [
+      { row: 0, column: 'plan', type: 'plan.format', suggestion: 'pro' },
+      { row: 1, column: 'plan', type: 'plan.format', suggestion: 'pro' },
+      { row: 2, column: 'email', type: 'email.invalid' },
+    ] as const
+    const mask = searchMask(searchIndex, normalizeQuery('ann'))
+    expect([...mask]).toEqual([1, 0, 1, 0])
+    expect(summarizeRows(rowStatus, issues, mask)).toEqual({
+      rowCount: 2,
+      statusCounts: { valid: 1, fixable: 0, manual: 1 },
+      issueCounts: { 'plan.format': 1, 'email.invalid': 1 },
+    })
   })
 })

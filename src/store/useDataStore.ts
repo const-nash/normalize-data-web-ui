@@ -9,8 +9,10 @@ import {
   filterRows,
   normalizeQuery,
   rowsWithIssue,
+  searchMask,
+  summarizeRows,
 } from '../domain/filter'
-import type { QuickFilter } from '../domain/filter'
+import type { QuickFilter, ScopeSummary } from '../domain/filter'
 import { buildDuplicateIndexes, editCell } from '../domain/editCell'
 import type { DuplicateIndexes } from '../domain/editCell'
 import { checkImportFile } from '../domain/importFile'
@@ -57,6 +59,8 @@ export interface DataState extends ViewState {
   dataset: Dataset | null
   // The grid renders `visibleRows`, indices into dataset.rows
   visibleRows: Uint32Array
+  // Counts for the rows matching the search; null when the search is empty (all rows count)
+  scope: ScopeSummary | null
   history: HistoryEntry[]
   // Saved edits that are still being revalidated, shown with a saving state
   pendingEdits: PendingEdit[]
@@ -118,6 +122,20 @@ function computeView(dataset: Dataset | null, { search, quickFilter, issueType }
   return filterRows({ rowStatus: dataset.rowStatus, quickFilter, query, searchIndex, rowMask })
 }
 
+// Rows matching the current search, or null when the search is empty
+function currentSearchMask(dataset: Dataset, search: string) {
+  const query = normalizeQuery(search)
+  if (query === '') return null
+  searchIndex ??= buildSearchIndex(dataset.rows)
+  return searchMask(searchIndex, query)
+}
+
+function computeScope(dataset: Dataset | null, search: string) {
+  if (!dataset) return null
+  const mask = currentSearchMask(dataset, search)
+  return mask ? summarizeRows(dataset.rowStatus, dataset.issues, mask) : null
+}
+
 const validationOf = ({
   issues,
   issueOffsets,
@@ -151,7 +169,15 @@ export const dataStore = createStore<DataState>()((set, get) => {
   // Updates view state and recomputes the visible rows in one store update
   const setView = (view: Partial<ViewState>) => {
     const next = { ...get(), ...view }
-    set({ ...view, visibleRows: computeView(next.dataset, next) })
+    const scope = computeScope(next.dataset, next.search)
+    // A search can leave the chosen issue type without rows; then the selection is cleared
+    if (next.issueType && scope && !scope.issueCounts[next.issueType]) next.issueType = null
+    set({
+      ...view,
+      issueType: next.issueType,
+      visibleRows: computeView(next.dataset, next),
+      scope,
+    })
   }
 
   // Replaces the dataset after a change of rows, keeping the current view
@@ -159,9 +185,17 @@ export const dataStore = createStore<DataState>()((set, get) => {
     searchIndex = null
     duplicateIndexes = null
     let view: ViewState = get()
-    // The chosen issue type may be gone after a fix
-    if (view.issueType && !dataset.issueCounts[view.issueType]) view = { ...view, issueType: null }
-    set({ dataset, history, issueType: view.issueType, visibleRows: computeView(dataset, view) })
+    const scope = computeScope(dataset, view.search)
+    // The chosen issue type may be gone after a fix (in the searched rows, if there is a search)
+    const counts = scope?.issueCounts ?? dataset.issueCounts
+    if (view.issueType && !counts[view.issueType]) view = { ...view, issueType: null }
+    set({
+      dataset,
+      history,
+      scope,
+      issueType: view.issueType,
+      visibleRows: computeView(dataset, view),
+    })
     prepareDuplicateIndexes(dataset, () => get().dataset)
   }
 
@@ -193,29 +227,32 @@ export const dataStore = createStore<DataState>()((set, get) => {
     if (searchIndex) searchIndex[row] = buildSearchIndex([result.rows[row]])[0]
     // The visible rows stay as they are, so an edited row does not jump away from the user.
     // Filters apply again on the next filter change.
-    set({
-      dataset: { ...dataset, ...result.validation, rows: result.rows, changed },
-      history: [...history, entry],
-    })
+    const next = { ...dataset, ...result.validation, rows: result.rows, changed }
+    set({ dataset: next, history: [...history, entry], scope: computeScope(next, get().search) })
   }
 
   return {
     dataset: null,
     ...VIEW_RESET,
     visibleRows: new Uint32Array(),
+    scope: null,
     history: [],
     pendingEdits: [],
     progress: null,
     error: null,
 
     setSearch: (search) => setView({ search }),
-    setQuickFilter: (quickFilter) => setView({ quickFilter }),
-    setIssueType: (issueType) => setView({ issueType }),
+    // Quick filters and the overview selection exclude each other: picking an issue type looks at
+    // all rows (within the search), picking a quick filter clears the issue type
+    setQuickFilter: (quickFilter) => setView({ quickFilter, issueType: null }),
+    setIssueType: (issueType) =>
+      setView(issueType ? { issueType, quickFilter: QUICK_FILTER.ALL } : { issueType }),
 
     applyAutoFix: (issueType) => {
       const { dataset, history } = get()
       if (!dataset) return 0
-      const fixes = planAutoFix(dataset, issueType)
+      // With a search, only the matching rows are fixed
+      const fixes = planAutoFix(dataset, issueType, currentSearchMask(dataset, get().search))
       if (fixes.length === 0) return 0
 
       const { rows } = applyPatches(dataset.rows, fixes)
@@ -327,6 +364,7 @@ export const dataStore = createStore<DataState>()((set, get) => {
         set({
           dataset,
           history: [],
+          scope: null,
           ...VIEW_RESET,
           visibleRows: computeView(dataset, VIEW_RESET),
         })
@@ -351,6 +389,7 @@ export const dataStore = createStore<DataState>()((set, get) => {
       set({
         dataset: null,
         history: [],
+        scope: null,
         error: null,
         ...VIEW_RESET,
         visibleRows: new Uint32Array(),

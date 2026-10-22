@@ -40,6 +40,43 @@ interface FilterInput {
   rowMask?: Uint8Array | null
 }
 
+// Marks the rows whose text contains the (normalized) query
+export function searchMask(searchIndex: readonly string[], query: string) {
+  const mask = new Uint8Array(searchIndex.length)
+  for (let row = 0; row < searchIndex.length; row++) {
+    if (searchIndex[row].includes(query)) mask[row] = 1
+  }
+  return mask
+}
+
+export interface ScopeSummary {
+  rowCount: number
+  statusCounts: Record<'valid' | 'fixable' | 'manual', number>
+  issueCounts: Partial<Record<IssueId, number>>
+}
+
+// Row and issue counts for the rows in the mask, for example the rows that match a search
+export function summarizeRows(
+  rowStatus: Uint8Array,
+  issues: readonly IssueRecord[],
+  mask: Uint8Array,
+): ScopeSummary {
+  const statusCounts = { valid: 0, fixable: 0, manual: 0 }
+  let rowCount = 0
+  for (let row = 0; row < rowStatus.length; row++) {
+    if (mask[row] === 0) continue
+    rowCount++
+    if (rowStatus[row] === ROW_STATUS.VALID) statusCounts.valid++
+    else if (rowStatus[row] === ROW_STATUS.FIXABLE) statusCounts.fixable++
+    else statusCounts.manual++
+  }
+  const issueCounts: Partial<Record<IssueId, number>> = {}
+  for (const issue of issues) {
+    if (mask[issue.row] === 1) issueCounts[issue.type] = (issueCounts[issue.type] ?? 0) + 1
+  }
+  return { rowCount, statusCounts, issueCounts }
+}
+
 // Marks the rows that have an issue of the given type
 export function rowsWithIssue(issues: readonly IssueRecord[], type: IssueId, rowCount: number) {
   const mask = new Uint8Array(rowCount)

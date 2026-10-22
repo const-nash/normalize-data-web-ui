@@ -27,12 +27,14 @@ function groupIssues(issueCounts: Dataset['issueCounts']): IssueGroup[] {
 interface SelectedIssueActionsProps {
   type: IssueType
   count: number
+  // The search the fix is limited to, if any
+  search: string | null
   onApply: (issueType: IssueId) => void
 }
 
 // Shown under the selected issue type. The table, filtered to this type, is the preview: every
 // cell shows its current value and the suggested one.
-function SelectedIssueActions({ type, count, onApply }: SelectedIssueActionsProps) {
+function SelectedIssueActions({ type, count, search, onApply }: SelectedIssueActionsProps) {
   if (type.fixKind === 'manual') {
     return (
       <p className="mt-1.5 px-2.5 text-xs text-zinc-500 dark:text-zinc-400">
@@ -46,6 +48,7 @@ function SelectedIssueActions({ type, count, onApply }: SelectedIssueActionsProp
         {type.fixKind === 'suggested'
           ? 'This fix is an assumption. Check the suggested values in the table first.'
           : 'The table shows each value with its fix. You can undo it afterwards.'}
+        {search && ` Only rows matching “${search}” are fixed.`}
       </p>
       <button
         type="button"
@@ -67,7 +70,12 @@ export function IssuesOverview({ onClose }: IssuesOverviewProps) {
   const issueType = useDataStore((s) => s.issueType)
   const setIssueType = useDataStore((s) => s.setIssueType)
   const applyAutoFix = useDataStore((s) => s.applyAutoFix)
-  const { statusCounts, issueCounts, missingColumns } = dataset
+  const scope = useDataStore((s) => s.scope)
+  const search = useDataStore((s) => s.search.trim())
+  const setSearch = useDataStore((s) => s.setSearch)
+  // With a search, everything here counts only the matching rows
+  const { statusCounts, issueCounts } = scope ?? dataset
+  const { missingColumns } = dataset
   const groups = useMemo(() => groupIssues(issueCounts), [issueCounts])
 
   return (
@@ -98,6 +106,24 @@ export function IssuesOverview({ onClose }: IssuesOverviewProps) {
           </svg>
         </button>
       </div>
+
+      {scope && (
+        <div className="flex items-start justify-between gap-2 rounded-lg bg-indigo-50 p-3 text-sm text-indigo-900 dark:bg-indigo-950/50 dark:text-indigo-100">
+          <p>
+            Only rows matching <span className="font-semibold">“{search}”</span>
+            <span className="block text-xs opacity-80">
+              {scope.rowCount.toLocaleString()} of {dataset.rows.length.toLocaleString()} rows
+            </span>
+          </p>
+          <button
+            type="button"
+            onClick={() => setSearch('')}
+            className="shrink-0 rounded font-medium text-indigo-700 hover:underline focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none dark:text-indigo-300"
+          >
+            Clear search
+          </button>
+        </div>
+      )}
 
       <dl className="grid grid-cols-3 gap-2 text-center">
         {[
@@ -130,6 +156,12 @@ export function IssuesOverview({ onClose }: IssuesOverviewProps) {
       {missingColumns.length > 0 && (
         <p className="rounded-lg bg-red-50 p-3 text-sm text-red-800 dark:bg-red-950/40 dark:text-red-200">
           The file has no {missingColumns.join(', ')} column. Add it to the file and load it again.
+        </p>
+      )}
+
+      {scope && groups.length === 0 && (
+        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          No issues in the rows that match your search.
         </p>
       )}
 
@@ -173,7 +205,12 @@ export function IssuesOverview({ onClose }: IssuesOverviewProps) {
                     </span>
                   </button>
                   {selected && (
-                    <SelectedIssueActions type={type} count={count} onApply={applyAutoFix} />
+                    <SelectedIssueActions
+                      type={type}
+                      count={count}
+                      search={scope ? search : null}
+                      onApply={applyAutoFix}
+                    />
                   )}
                 </li>
               )

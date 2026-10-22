@@ -56,6 +56,11 @@ describe('planAutoFix', () => {
     expect(planAutoFix(input(), 'country.name').some((fix) => fix.row === 2)).toBe(true)
   })
 
+  it('fixes only rows in the mask', () => {
+    const mask = Uint8Array.from([0, 0, 1, 0])
+    expect(planAutoFix(input(), 'country.name', mask).map((fix) => fix.row)).toEqual([2])
+  })
+
   it('plans nothing for manual issue types', () => {
     expect(planAutoFix(input(), 'email.invalid')).toEqual([])
   })

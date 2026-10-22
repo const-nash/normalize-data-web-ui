@@ -37,7 +37,15 @@ export function FilterBar() {
   const setSearch = useDataStore((s) => s.setSearch)
   const setQuickFilter = useDataStore((s) => s.setQuickFilter)
   // The input updates on every key; the store (and the grid) only after typing pauses
-  const [input, setInput] = useState(() => useDataStore.getState().search)
+  const search = useDataStore((s) => s.search)
+  const [input, setInput] = useState(search)
+  // The search can be cleared elsewhere (the overview); mirror that into the field. Only clearing
+  // is mirrored: other changes come from this field and may lag behind it while debouncing.
+  const [lastSearch, setLastSearch] = useState(search)
+  if (search !== lastSearch) {
+    setLastSearch(search)
+    if (search === '') setInput('')
+  }
 
   const debouncedSearch = useMemo(() => debounce(setSearch, SEARCH_DEBOUNCE_MS), [setSearch])
   useEffect(() => () => debouncedSearch.cancel(), [debouncedSearch])
