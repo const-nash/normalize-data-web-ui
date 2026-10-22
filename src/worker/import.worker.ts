@@ -96,15 +96,15 @@ const handlers: Handlers = {
       signal.throwIfAborted()
       step = validation.next()
     }
-    const { issues, rowStatus, ...summary } = step.value
+    const { issues, rowStatus, issueOffsets, ...summary } = step.value
 
     for (let i = 0; i < issues.length; i += ISSUE_CHUNK_SIZE) {
       const slice: IssueRecord[] = issues.slice(i, i + ISSUE_CHUNK_SIZE)
       chunk({ kind: 'issues', issues: slice })
     }
-    transfer(rowStatus.buffer)
+    transfer(rowStatus.buffer, issueOffsets.buffer)
 
-    return { columns, rowCount: rows.length, rowStatus, ...summary }
+    return { columns, rowCount: rows.length, rowStatus, issueOffsets, ...summary }
   },
 }
 

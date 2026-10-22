@@ -23,8 +23,9 @@ export type LoadChunk = { kind: 'rows'; rows: Row[] } | { kind: 'issues'; issues
 export interface LoadResult extends ValidationSummary {
   columns: string[]
   rowCount: number
-  // ROW_STATUS per row, transferred without copying
+  // Transferred without copying: ROW_STATUS per row, and where each row's issues start
   rowStatus: Uint8Array
+  issueOffsets: Uint32Array
 }
 
 interface MethodSpec<P, R, G = never, C = never> {

@@ -1,18 +1,15 @@
 import type { Dataset } from '../store/useDataStore'
 import { useDataStore } from '../store/useDataStore'
 import { useCallback, useMemo } from 'react'
-import { columnsForHeader } from './customerColumns'
+import { columnsForDataset } from './customerColumns'
 import { FilterBar } from './FilterBar'
 import { Table } from './Table'
 
 export function DataScreen({ dataset }: { dataset: Dataset }) {
   const reset = useDataStore((s) => s.reset)
   const visibleRows = useDataStore((s) => s.visibleRows)
-  const columns = useMemo(() => columnsForHeader(dataset.columns), [dataset.columns])
-  const getRow = useCallback(
-    (index: number) => dataset.rows[visibleRows[index]],
-    [dataset, visibleRows],
-  )
+  const columns = useMemo(() => columnsForDataset(dataset), [dataset])
+  const getRow = useCallback((index: number) => visibleRows[index], [visibleRows])
 
   return (
     <div className="flex h-screen flex-col gap-4 p-4">

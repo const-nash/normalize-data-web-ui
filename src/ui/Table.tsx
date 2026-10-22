@@ -9,6 +9,8 @@ export interface TableColumn<TRow> {
   id: string
   header: ReactNode
   cell: (row: TRow) => ReactNode
+  // Extra classes for the cell container, for example to mark an invalid value
+  cellClassName?: (row: TRow) => string | undefined
   // Minimum width in Tailwind spacing steps: 32 means the same width as `w-32`
   size?: number
   // Higher numbers stay visible longer when the table gets narrow
@@ -94,11 +96,18 @@ export function Table<TRow>({
             className="grid border-b border-zinc-100 text-sm transition-colors hover:bg-zinc-50 dark:border-zinc-800/60 dark:hover:bg-zinc-800/40"
             style={{ ...layout, ...style }}
           >
-            {visible.map((column) => (
-              <div key={column.id} role="gridcell" className="flex min-w-0 items-center px-4">
-                <span className="truncate">{column.cell(getRow(index))}</span>
-              </div>
-            ))}
+            {visible.map((column) => {
+              const row = getRow(index)
+              return (
+                <div
+                  key={column.id}
+                  role="gridcell"
+                  className={`flex min-w-0 items-center px-4 ${column.cellClassName?.(row) ?? ''}`}
+                >
+                  {column.cell(row)}
+                </div>
+              )
+            })}
           </div>
         )}
       />

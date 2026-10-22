@@ -1,5 +1,8 @@
+import { mapColumns, findCellIssue } from '../domain/validation'
 import type { CustomerColumn } from '../domain/customer'
-import type { Row } from '../worker/protocol'
+import type { Dataset } from '../store/useDataStore'
+import { IssueCell } from './IssueCell'
+import { issueCellClass } from './issueCellClass'
 import type { TableColumn } from './Table'
 
 interface ColumnLayout {
@@ -23,17 +26,24 @@ const LAYOUT: Record<CustomerColumn, ColumnLayout> = {
 // Columns the spec does not know stay visible only while there is room
 const UNKNOWN_COLUMN: ColumnLayout = { size: 32, priority: 0 }
 
-const layoutFor = (name: string) =>
-  LAYOUT[name.trim().toLowerCase() as CustomerColumn] ?? UNKNOWN_COLUMN
+// Builds table columns from the file header, in file order. A table row is a row index into
+// the dataset, so a cell can look up both its value and its issue.
+export function columnsForDataset(dataset: Dataset): Array<TableColumn<number>> {
+  const { rows, columns, issues, issueOffsets } = dataset
+  const specColumnAt = new Map<number, CustomerColumn>()
+  for (const [column, index] of mapColumns(columns).positions) specColumnAt.set(index, column)
 
-// Builds table columns from the file header, in file order. Rows stay positional arrays.
-export function columnsForHeader(header: readonly string[]): Array<TableColumn<Row>> {
-  return header.map((name, index) => {
-    const { size, priority } = layoutFor(name)
+  return columns.map((name, index) => {
+    const specColumn = specColumnAt.get(index)
+    const { size, priority } = specColumn ? LAYOUT[specColumn] : UNKNOWN_COLUMN
+    const issueAt = (row: number) =>
+      specColumn ? findCellIssue(issues, issueOffsets, row, specColumn) : undefined
+
     return {
       id: `${index}:${name}`,
       header: name,
-      cell: (row) => row[index] ?? '',
+      cell: (row) => <IssueCell value={rows[row][index] ?? ''} issue={issueAt(row)} />,
+      cellClassName: (row) => issueCellClass(issueAt(row)),
       size,
       priority,
     }

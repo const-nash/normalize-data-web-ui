@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildDuplicateIndex, duplicateRows, normalizeEmail } from './rules/duplicates'
-import { ROW_STATUS, mapColumns, validateAll, validateRows } from './validation'
+import { ROW_STATUS, findCellIssue, mapColumns, validateAll, validateRows } from './validation'
 
 const HEADER = [
   'customer_id',
@@ -96,6 +96,22 @@ describe('validateRows', () => {
     }
     expect(progress).toEqual([4, 8])
     expect(step.value.statusCounts.valid).toBe(10)
+  })
+})
+
+describe('findCellIssue', () => {
+  it('finds the issue of a cell through the row offsets', () => {
+    const rows = [
+      withCell(VALID, 'plan', 'Pro'),
+      withCell(VALID, 'customer_id', 'C2'),
+      withCell(withCell(VALID, 'customer_id', 'C3'), 'country', 'Germany'),
+    ].map((row, i) => withCell(row, 'email', `${i}@example.com`))
+    const { issues, issueOffsets } = validateAll(HEADER, rows)
+    expect([...issueOffsets]).toEqual([0, 1, 1, 2])
+    expect(findCellIssue(issues, issueOffsets, 0, 'plan')?.suggestion).toBe('pro')
+    expect(findCellIssue(issues, issueOffsets, 1, 'plan')).toBeUndefined()
+    expect(findCellIssue(issues, issueOffsets, 2, 'country')?.type).toBe('country.name')
+    expect(findCellIssue(issues, issueOffsets, 2, 'plan')).toBeUndefined()
   })
 })
 

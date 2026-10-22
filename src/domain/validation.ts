@@ -35,6 +35,8 @@ export interface ValidationResult extends ValidationSummary {
   issues: IssueRecord[]
   // ROW_STATUS per row
   rowStatus: Uint8Array<ArrayBuffer>
+  // Issues of row r are issues[issueOffsets[r]] up to issues[issueOffsets[r + 1]]
+  issueOffsets: Uint32Array<ArrayBuffer>
 }
 
 // Index of each spec column in the file header, matched by trimmed lowercase name
@@ -73,12 +75,14 @@ export function* validateRows(
 
   const issues: IssueRecord[] = []
   const rowStatus = new Uint8Array(rows.length)
+  const issueOffsets = new Uint32Array(rows.length + 1)
   const statusCounts = { valid: 0, fixable: 0, manual: 0 }
   const issueCounts: Partial<Record<IssueId, number>> = {}
   const columns = [...positions]
 
   for (let row = 0; row < rows.length; row++) {
     let status: RowStatus = ROW_STATUS.VALID
+    issueOffsets[row] = issues.length
 
     for (const [column, position] of columns) {
       let issue = validateCell(column, rows[row][position] ?? '')
@@ -109,7 +113,21 @@ export function* validateRows(
     if ((row + 1) % yieldEvery === 0) yield row + 1
   }
 
-  return { issues, rowStatus, statusCounts, issueCounts, missingColumns: missing }
+  issueOffsets[rows.length] = issues.length
+  return { issues, rowStatus, issueOffsets, statusCounts, issueCounts, missingColumns: missing }
+}
+
+// The issue of one cell, found through the per-row offsets
+export function findCellIssue(
+  issues: readonly IssueRecord[],
+  issueOffsets: Uint32Array,
+  row: number,
+  column: CustomerColumn,
+): IssueRecord | undefined {
+  for (let i = issueOffsets[row]; i < issueOffsets[row + 1]; i++) {
+    if (issues[i].column === column) return issues[i]
+  }
+  return undefined
 }
 
 // Runs validateRows to the end without pausing

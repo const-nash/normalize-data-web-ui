@@ -19,6 +19,8 @@ export interface Dataset extends ValidationSummary {
   issues: IssueRecord[]
   // ROW_STATUS per row: valid, fixable after review, or manual
   rowStatus: Uint8Array
+  // Issues of row r are issues[issueOffsets[r]] up to issues[issueOffsets[r + 1]]
+  issueOffsets: Uint32Array
 }
 
 export interface DataState {
