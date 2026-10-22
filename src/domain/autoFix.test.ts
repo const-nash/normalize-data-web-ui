@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { FIX_MODE, applyPatches, findPatch, planAutoFix } from './autoFix'
+import { applyPatches, findPatch, planAutoFix } from './autoFix'
 import { ROW_STATUS, removeIssues, revalidateRows, validateAll } from './validation'
 
 const HEADER = [
@@ -37,33 +37,33 @@ const input = () => {
   return { columns: HEADER, rows: ROWS, ...validation }
 }
 
+// All fixable issues of the test rows, one issue type after another
+const planAll = (state: ReturnType<typeof input>) =>
+  (['country.name', 'plan.format', 'monthly_spend.format'] as const)
+    .flatMap((type) => planAutoFix(state, type))
+    .toSorted((a, b) => a.row - b.row || a.column - b.column)
+
 describe('planAutoFix', () => {
-  it('fixes only fully fixable rows in clean-rows mode', () => {
-    const plan = planAutoFix(input(), FIX_MODE.CLEAN_ROWS)
-    expect(plan.rowCount).toBe(2)
-    expect(plan.fixes.map((fix) => [fix.row, fix.before, fix.after])).toEqual([
+  it('plans fixes for one issue type, with before and after values', () => {
+    const fixes = planAutoFix(input(), 'country.name')
+    expect(fixes.map((fix) => [fix.row, fix.before, fix.after])).toEqual([
       [1, 'Germany', 'DE'],
-      [1, 'Pro', 'pro'],
-      [3, '€12', '12'],
+      [2, 'France', 'FR'],
     ])
   })
 
-  it('also fixes fixable cells of manual rows in all mode', () => {
-    const plan = planAutoFix(input(), FIX_MODE.ALL)
-    expect(plan.rowCount).toBe(3)
-    expect(plan.fixes.some((fix) => fix.row === 2 && fix.after === 'FR')).toBe(true)
+  it('includes fixable cells of rows that also have manual issues', () => {
+    expect(planAutoFix(input(), 'country.name').some((fix) => fix.row === 2)).toBe(true)
   })
 
-  it('groups fixes by issue type, most frequent first, with examples', () => {
-    const plan = planAutoFix(input(), FIX_MODE.ALL)
-    expect(plan.groups[0]).toMatchObject({ type: 'country.name', count: 2 })
-    expect(plan.groups[0].examples.map((fix) => fix.after)).toEqual(['DE', 'FR'])
+  it('plans nothing for manual issue types', () => {
+    expect(planAutoFix(input(), 'email.invalid')).toEqual([])
   })
 })
 
 describe('findPatch', () => {
   it('finds the patch of a cell by row and column', () => {
-    const { fixes } = planAutoFix(input(), FIX_MODE.ALL)
+    const fixes = planAll(input())
     for (const fix of fixes) expect(findPatch(fixes, fix.row, fix.column)).toBe(fix)
     expect(findPatch(fixes, 0, 0)).toBeUndefined()
     expect(findPatch(fixes, 1, 0)).toBeUndefined()
@@ -73,14 +73,14 @@ describe('findPatch', () => {
 
 describe('applyPatches', () => {
   it('applies patches without mutating the input and undoes them', () => {
-    const plan = planAutoFix(input(), FIX_MODE.ALL)
-    const applied = applyPatches(ROWS, plan.fixes)
+    const fixes = planAll(input())
+    const applied = applyPatches(ROWS, fixes)
     expect(applied.rows[1][5]).toBe('DE')
     expect(ROWS[1][5]).toBe('Germany')
     expect(applied.rows[0]).toBe(ROWS[0]) // untouched rows are shared
     expect([...applied.changedRows]).toEqual([1, 2, 3])
 
-    const undone = applyPatches(applied.rows, plan.fixes, true)
+    const undone = applyPatches(applied.rows, fixes, true)
     expect(undone.rows).toEqual(ROWS)
   })
 
@@ -98,8 +98,7 @@ describe('applyPatches', () => {
 describe('revalidateRows', () => {
   it('updates statuses and counts after a fix, keeping manual issues', () => {
     const before = input()
-    const plan = planAutoFix(before, FIX_MODE.ALL)
-    const { rows, changedRows } = applyPatches(ROWS, plan.fixes)
+    const { rows, changedRows } = applyPatches(ROWS, planAll(before))
     const after = revalidateRows(HEADER, rows, before, changedRows)
 
     expect([...after.rowStatus]).toEqual([
@@ -114,10 +113,9 @@ describe('revalidateRows', () => {
 
   it('gives the same result as removing the fixed issues', () => {
     const before = input()
-    for (const mode of [FIX_MODE.CLEAN_ROWS, FIX_MODE.ALL]) {
-      const plan = planAutoFix(before, mode)
-      const { rows, changedRows } = applyPatches(ROWS, plan.fixes)
-      const removed = removeIssues(before, new Set(plan.fixes.map((fix) => fix.issue)))
+    for (const fixes of [planAutoFix(before, 'country.name'), planAll(before)]) {
+      const { rows, changedRows } = applyPatches(ROWS, fixes)
+      const removed = removeIssues(before, new Set(fixes.map((fix) => fix.issue)))
       expect(removed).toEqual(revalidateRows(HEADER, rows, before, changedRows))
     }
   })
@@ -125,8 +123,8 @@ describe('revalidateRows', () => {
   it('keeps duplicate flags of changed rows', () => {
     const rows = [row('C1'), row('C1', { email: 'x@example.com', plan: 'Pro' })]
     const before = validateAll(HEADER, rows)
-    const plan = planAutoFix({ columns: HEADER, rows, ...before }, FIX_MODE.ALL)
-    const applied = applyPatches(rows, plan.fixes)
+    const fixes = planAutoFix({ columns: HEADER, rows, ...before }, 'plan.format')
+    const applied = applyPatches(rows, fixes)
     const after = revalidateRows(HEADER, applied.rows, before, applied.changedRows)
     expect(after.issueCounts).toEqual({ 'customer_id.duplicate': 2 })
   })

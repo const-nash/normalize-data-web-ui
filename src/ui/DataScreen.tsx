@@ -1,7 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import type { FixMode } from '../domain/autoFix'
 import { useDataStore } from '../store/useDataStore'
-import { AutoFixDialog } from './AutoFixDialog'
 import { columnsForDataset } from './customerColumns'
 import { FilterBar } from './FilterBar'
 import { IssuesOverview } from './IssuesOverview'
@@ -15,23 +13,24 @@ export function DataScreen() {
   const dataset = useShownDataset()
   const reset = useDataStore((s) => s.reset)
   const undo = useDataStore((s) => s.undo)
-  const applyAutoFix = useDataStore((s) => s.applyAutoFix)
   const editCell = useDataStore((s) => s.editCell)
   const pendingEdits = useDataStore((s) => s.pendingEdits)
   const history = useDataStore((s) => s.history)
   const lastChange = history.at(-1)?.label
   const visibleRows = useDataStore((s) => s.visibleRows)
-  const [dialogOpen, setDialogOpen] = useState(false)
+  const [overviewOpen, setOverviewOpen] = useState(true)
+  const issueTotal = useMemo(
+    () => Object.values(dataset.issueCounts).reduce((sum, count) => sum + count, 0),
+    [dataset.issueCounts],
+  )
+  // Nothing left to fix: the overview is not shown at all. Missing columns cannot be fixed here,
+  // so they keep it visible.
+  const hasIssues = issueTotal > 0 || dataset.missingColumns.length > 0
   const columns = useMemo(
     () => columnsForDataset(dataset, history, editCell, pendingEdits),
     [dataset, history, editCell, pendingEdits],
   )
   const getRow = useCallback((index: number) => visibleRows[index], [visibleRows])
-
-  const handleApply = (mode: FixMode) => {
-    applyAutoFix(mode)
-    setDialogOpen(false)
-  }
 
   return (
     <div className="flex h-screen flex-col gap-4 p-4">
@@ -59,6 +58,17 @@ export function DataScreen() {
               Undo
             </button>
           )}
+          {hasIssues && !overviewOpen && (
+            <button
+              type="button"
+              onClick={() => setOverviewOpen(true)}
+              aria-expanded={false}
+              aria-controls="issues-overview"
+              className={secondaryButton}
+            >
+              Issues ({issueTotal.toLocaleString()})
+            </button>
+          )}
           <button type="button" onClick={reset} className={secondaryButton}>
             Choose another file
           </button>
@@ -66,7 +76,7 @@ export function DataScreen() {
       </header>
       <FilterBar />
       <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
-        <IssuesOverview onAutoFix={() => setDialogOpen(true)} />
+        {hasIssues && overviewOpen && <IssuesOverview onClose={() => setOverviewOpen(false)} />}
         <main
           className="relative min-h-64 min-w-0 flex-1"
           style={{ viewTransitionName: 'app-surface' }}
@@ -85,7 +95,6 @@ export function DataScreen() {
           )}
         </main>
       </div>
-      <AutoFixDialog open={dialogOpen} onClose={() => setDialogOpen(false)} onApply={handleApply} />
     </div>
   )
 }

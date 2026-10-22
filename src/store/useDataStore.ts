@@ -2,7 +2,7 @@ import { useStore } from 'zustand'
 import { createStore } from 'zustand/vanilla'
 import { ERROR_MESSAGE } from '../constants/errorMessages'
 import { applyPatches, findPatch, planAutoFix } from '../domain/autoFix'
-import type { FixMode, Patch } from '../domain/autoFix'
+import type { Patch } from '../domain/autoFix'
 import {
   QUICK_FILTER,
   buildSearchIndex,
@@ -14,6 +14,7 @@ import type { QuickFilter } from '../domain/filter'
 import { buildDuplicateIndexes, editCell } from '../domain/editCell'
 import type { DuplicateIndexes } from '../domain/editCell'
 import { checkImportFile } from '../domain/importFile'
+import { ISSUE_TYPES } from '../domain/rules/issueTypes'
 import type { IssueId } from '../domain/rules/issueTypes'
 import { removeIssues } from '../domain/validation'
 import type { IssueRecord, Row as DatasetRow, ValidationResult } from '../domain/validation'
@@ -64,7 +65,8 @@ export interface DataState extends ViewState {
   setSearch: (search: string) => void
   setQuickFilter: (quickFilter: QuickFilter) => void
   setIssueType: (issueType: IssueId | null) => void
-  applyAutoFix: (mode: FixMode) => number
+  // Applies every suggested value of one issue type; returns the number of fixed values
+  applyAutoFix: (issueType: IssueId) => number
   editCell: (row: number, column: number, value: string) => void
   undo: () => void
   loadFile: (file: File) => Promise<void>
@@ -210,10 +212,10 @@ export const dataStore = createStore<DataState>()((set, get) => {
     setQuickFilter: (quickFilter) => setView({ quickFilter }),
     setIssueType: (issueType) => setView({ issueType }),
 
-    applyAutoFix: (mode) => {
+    applyAutoFix: (issueType) => {
       const { dataset, history } = get()
       if (!dataset) return 0
-      const { fixes } = planAutoFix(dataset, mode)
+      const fixes = planAutoFix(dataset, issueType)
       if (fixes.length === 0) return 0
 
       const { rows } = applyPatches(dataset.rows, fixes)
@@ -221,7 +223,7 @@ export const dataStore = createStore<DataState>()((set, get) => {
       const width = dataset.columns.length
       for (const fix of fixes) changed[fix.row * width + fix.column] = 1
       const entry: HistoryEntry = {
-        label: `Fixed ${fixes.length.toLocaleString()} values automatically`,
+        label: `Fixed ${fixes.length.toLocaleString()} values: ${ISSUE_TYPES[issueType].title}`,
         patches: fixes,
         validation: validationOf(dataset),
         changed: dataset.changed,

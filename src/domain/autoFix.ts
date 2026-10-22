@@ -1,5 +1,5 @@
 import type { IssueId } from './rules/issueTypes'
-import { ROW_STATUS, mapColumns } from './validation'
+import { mapColumns } from './validation'
 import type { IssueRecord, Row } from './validation'
 
 // One cell change. A single edit is one history entry; a bulk fix is one entry with many.
@@ -17,75 +17,31 @@ export interface PlannedFix extends Patch {
   issue: number
 }
 
-export const FIX_MODE = {
-  // Only rows where every issue has a suggestion; such rows become valid
-  CLEAN_ROWS: 'clean-rows',
-  // Every issue with a suggestion, also in rows that keep manual issues
-  ALL: 'all',
-} as const
-export type FixMode = (typeof FIX_MODE)[keyof typeof FIX_MODE]
-
-export interface FixGroup {
-  type: IssueId
-  count: number
-  examples: PlannedFix[]
-}
-
-export interface AutoFixPlan {
-  fixes: PlannedFix[]
-  rowCount: number
-  // Per issue type, most frequent first
-  groups: FixGroup[]
-}
-
-const EXAMPLES_PER_GROUP = 3
-
 interface PlanInput {
   columns: readonly string[]
   rows: readonly Row[]
   issues: readonly IssueRecord[]
-  rowStatus: Uint8Array
 }
 
-export function planAutoFix({ columns, rows, issues, rowStatus }: PlanInput, mode: FixMode) {
+// Every issue of the given type that has a suggested value, as a fix with before and after
+export function planAutoFix({ columns, rows, issues }: PlanInput, issueType: IssueId) {
   const { positions } = mapColumns(columns)
   const fixes: PlannedFix[] = []
-  const groups = new Map<IssueId, FixGroup>()
-  let rowCount = 0
-  let lastRow = -1
-
   for (let index = 0; index < issues.length; index++) {
     const issue = issues[index]
-    if (issue.suggestion === undefined) continue
-    if (mode === FIX_MODE.CLEAN_ROWS && rowStatus[issue.row] !== ROW_STATUS.FIXABLE) continue
+    if (issue.type !== issueType || issue.suggestion === undefined) continue
     const column = positions.get(issue.column)
     if (column === undefined) continue
-
-    const fix: PlannedFix = {
+    fixes.push({
       row: issue.row,
       column,
       before: rows[issue.row][column] ?? '',
       after: issue.suggestion,
       type: issue.type,
       issue: index,
-    }
-    fixes.push(fix)
-    if (issue.row !== lastRow) {
-      rowCount++
-      lastRow = issue.row
-    }
-
-    const group = groups.get(issue.type)
-    if (group) {
-      group.count++
-      if (group.examples.length < EXAMPLES_PER_GROUP) group.examples.push(fix)
-    } else {
-      groups.set(issue.type, { type: issue.type, count: 1, examples: [fix] })
-    }
+    })
   }
-
-  const sorted = [...groups.values()].toSorted((a, b) => b.count - a.count)
-  return { fixes, rowCount, groups: sorted } satisfies AutoFixPlan
+  return fixes
 }
 
 // Returns new rows with the patches applied; untouched rows are shared, touched rows copied.
