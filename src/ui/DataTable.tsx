@@ -1,13 +1,18 @@
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { useRef } from 'react'
-import { useDataStore } from '../store/useDataStore'
+import { useMemo, useRef } from 'react'
+import type { Dataset } from '../store/useDataStore'
 
 const ROW_HEIGHT = 32
 
-export function DataTable() {
-  const columns = useDataStore((s) => s.columns)
-  const rows = useDataStore((s) => s.rows)
+interface DataTableProps {
+  dataset: Dataset
+}
+
+export function DataTable({ dataset }: DataTableProps) {
+  const { columns, rows } = dataset
   const parentRef = useRef<HTMLDivElement>(null)
+  // Header names may repeat, so prefix with the position to keep keys unique
+  const columnKeys = useMemo(() => columns.map((name, c) => `${c}:${name}`), [columns])
 
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -27,8 +32,8 @@ export function DataTable() {
         className="sticky top-0 z-10 grid border-b border-zinc-200 bg-zinc-50 text-sm font-semibold dark:border-zinc-800 dark:bg-zinc-800"
         style={{ gridTemplateColumns }}
       >
-        {columns.map((col) => (
-          <div key={col} className="truncate px-3 py-2">
+        {columns.map((col, c) => (
+          <div key={columnKeys[c]} className="truncate px-3 py-2">
             {col}
           </div>
         ))}
@@ -46,9 +51,9 @@ export function DataTable() {
                 transform: `translateY(${item.start}px)`,
               }}
             >
-              {columns.map((col) => (
-                <div key={col} className="truncate px-3 leading-8">
-                  {row[col]}
+              {columnKeys.map((key, c) => (
+                <div key={key} className="truncate px-3 leading-8">
+                  {row[c] ?? ''}
                 </div>
               ))}
             </div>

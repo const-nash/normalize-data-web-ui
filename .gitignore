@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Generated data (see CLAUDE.md)
+import-data.csv
+issues-report.json
