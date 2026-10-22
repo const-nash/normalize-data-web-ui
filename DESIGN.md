@@ -73,7 +73,7 @@ Why: 200,000 rows fit easily in main thread memory. Edits, undo and index based 
 
 Chosen: inline editing in the cell. It is what CLAUDE.md asks for, it matches how people use spreadsheets, and it covers the main case: one wrong value, fixed on the spot.
 
-- Double click, Enter or F2 opens an input in place. Enter or leaving the field saves, Escape cancels. Arrow keys, Home/End and PageUp/PageDown move between cells.
+- Hovering a cell shows a pencil button; clicking it opens an input in place (double click was dropped as not discoverable). On keyboard and touch the pencil shows on the focused cell, and Enter or F2 also edit. Saving an unchanged value does nothing: no history entry, no revalidation. Enter or leaving the field saves, Escape cancels. Arrow keys, Home/End and PageUp/PageDown move between cells.
 - While typing, a hint below the cell says whether the value is fine, or what is wrong and what a good value looks like. When the rule has a suggested value, "Use DE" applies it in one click.
 - After saving, only the row and the duplicate groups it left or joined are revalidated; counts change by difference. Each edit is one history entry with Undo. Rows stay in place until the filter changes, so an edited row does not jump away.
 

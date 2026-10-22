@@ -31,6 +31,34 @@ interface TableProps<TRow> {
   className?: string
 }
 
+// Shown on hover, and on the focused cell for keyboard and touch. Enter or F2 also edits.
+function EditButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      tabIndex={-1}
+      aria-label="Edit cell"
+      title="Edit"
+      onClick={onClick}
+      className="absolute top-1/2 right-1.5 flex size-7 -translate-y-1/2 items-center justify-center rounded-md bg-white/95 text-zinc-500 opacity-0 shadow-sm ring-1 ring-zinc-200 transition-opacity group-hover:opacity-100 group-focus:opacity-100 hover:text-indigo-600 focus-visible:opacity-100 dark:bg-zinc-800/95 dark:text-zinc-400 dark:ring-zinc-700 dark:hover:text-indigo-400"
+    >
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="size-4"
+      >
+        <path d="M12 20h9" />
+        <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+      </svg>
+    </button>
+  )
+}
+
 const DEFAULT_COLUMN_SIZE = 32
 const PAGE_ROWS = 10
 
@@ -184,12 +212,14 @@ export function Table<TRow>({
                   data-cell={`${index}:${col}`}
                   tabIndex={isActive ? 0 : -1}
                   onFocus={() => setActive({ row: index, col })}
-                  onDoubleClick={() => startEditing({ row: index, col })}
-                  className={`flex min-w-0 items-center px-4 outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-indigo-500 ${
-                    isEditing ? 'relative z-20 px-1' : (column.cellClassName?.(row) ?? '')
+                  className={`group relative flex min-w-0 items-center px-4 outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-indigo-500 ${
+                    isEditing ? 'z-20 px-1' : (column.cellClassName?.(row) ?? '')
                   }`}
                 >
                   {isEditing ? column.renderEditor?.(row, closeEditor) : column.cell(row)}
+                  {!isEditing && column.renderEditor && (
+                    <EditButton onClick={() => startEditing({ row: index, col })} />
+                  )}
                 </div>
               )
             })}

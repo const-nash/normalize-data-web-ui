@@ -35,7 +35,8 @@ export function CellEditor({ initial, validate, onSave, onCancel }: CellEditorPr
   const finish = (save: boolean, next = value) => {
     if (done.current) return
     done.current = true
-    if (save) onSave(next)
+    // An unchanged value is not an edit: no history entry, no revalidation
+    if (save && next !== initial) onSave(next)
     else onCancel()
   }
 

@@ -65,9 +65,14 @@ export function IssuesOverview({ onAutoFix }: IssuesOverviewProps) {
           },
           { label: 'Manual', value: statusCounts.manual, tone: 'text-red-700 dark:text-red-400' },
         ].map(({ label, value, tone }) => (
-          <div key={label} className="rounded-lg bg-zinc-50 px-2 py-2 dark:bg-zinc-800/60">
-            <dt className="text-xs text-zinc-500 dark:text-zinc-400">{label} rows</dt>
-            <dd className={`text-lg font-semibold tabular-nums ${tone}`}>
+          // Number first, label below: labels wrap differently, numbers stay on one line.
+          // dt stays before dd in the markup for screen readers; the order is only visual.
+          <div
+            key={label}
+            className="flex flex-col-reverse justify-end rounded-lg bg-zinc-50 px-2 py-2 dark:bg-zinc-800/60"
+          >
+            <dt className="text-xs leading-tight text-zinc-500 dark:text-zinc-400">{label} rows</dt>
+            <dd className={`text-base leading-tight font-semibold tabular-nums ${tone}`}>
               {value.toLocaleString()}
             </dd>
           </div>

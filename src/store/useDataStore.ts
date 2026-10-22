@@ -233,6 +233,8 @@ export const dataStore = createStore<DataState>()((set, get) => {
 
     // Shows the new value with a saving state at once, then revalidates after the next paint
     editCell: (row, column, value) => {
+      const current = get().dataset?.rows[row]?.[column] ?? ''
+      if (current === value) return
       const edit: PendingEdit = { row, column, value }
       const started = performance.now()
       set({ pendingEdits: [...get().pendingEdits, edit] })
