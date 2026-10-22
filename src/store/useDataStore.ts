@@ -1,17 +1,19 @@
-import { create } from 'zustand'
-import { getImportWorker, isAbortError } from '../worker/client'
-import type { LoadProgress, Row } from '../worker/protocol'
+import { useStore } from 'zustand'
+import { createStore } from 'zustand/vanilla'
+import type { CustomerRow } from '../domain/customer'
+import { createMockCustomers } from '../mock/customers'
+import { simulateLoad } from '../mock/simulateLoad'
+import { isAbortError } from '../worker/client'
+import type { LoadProgress } from '../worker/protocol'
 
-const SUPPORTED_EXTENSIONS = new Set(['csv', 'tsv', 'txt'])
-const MAX_FILE_BYTES = 100 * 1024 * 1024
+const MOCK_ROW_COUNT = 200
 
 export interface Dataset {
   fileName: string
-  columns: string[]
-  rows: Row[]
+  rows: CustomerRow[]
 }
 
-interface DataState {
+export interface DataState {
   dataset: Dataset | null
   progress: LoadProgress | null
   error: string | null
@@ -22,53 +24,21 @@ interface DataState {
 
 let loadController: AbortController | null = null
 
-function checkFile(file: File): string | null {
-  const extension = file.name.split('.').pop()?.toLowerCase() ?? ''
-  if (!SUPPORTED_EXTENSIONS.has(extension)) {
-    return `Unsupported file type ".${extension}". Please choose a CSV, TSV or TXT file.`
-  }
-  if (file.size > MAX_FILE_BYTES) {
-    return 'This file is larger than 100 MB. Please split it into smaller files.'
-  }
-  return null
-}
-
-export const useDataStore = create<DataState>()((set) => ({
+export const dataStore = createStore<DataState>()((set) => ({
   dataset: null,
   progress: null,
   error: null,
 
+  // Simulated for now: any file shows the same mock rows after a fake parse and analysis
   loadFile: async (file) => {
-    const error = checkFile(file)
-    if (error) {
-      set({ error })
-      return
-    }
-
     loadController?.abort()
     const controller = new AbortController()
     loadController = controller
-
-    // Collect chunks outside the store and commit once, so React renders a single update
-    const rows: Row[] = []
-    set({
-      error: null,
-      progress: { stage: 'parsing', bytesRead: 0, totalBytes: file.size, rowsProcessed: 0 },
-    })
+    set({ error: null })
 
     try {
-      const { columns } = await getImportWorker().request(
-        'load',
-        { file },
-        {
-          signal: controller.signal,
-          onProgress: (progress) => set({ progress }),
-          onChunk: (chunk) => {
-            for (const row of chunk) rows.push(row)
-          },
-        },
-      )
-      set({ dataset: { fileName: file.name, columns, rows } })
+      await simulateLoad(file, MOCK_ROW_COUNT, controller.signal, (progress) => set({ progress }))
+      set({ dataset: { fileName: file.name, rows: createMockCustomers(MOCK_ROW_COUNT) } })
     } catch (err) {
       if (isAbortError(err)) return
       set({ error: err instanceof Error ? err.message : 'Could not read the file.' })
@@ -80,7 +50,9 @@ export const useDataStore = create<DataState>()((set) => ({
     }
   },
 
-  cancelLoad: () => loadController?.abort(),
+  cancelLoad: () => loadController?.abort(new DOMException('Load cancelled', 'AbortError')),
 
   reset: () => set({ dataset: null, error: null }),
 }))
+
+export const useDataStore = <T>(selector: (state: DataState) => T) => useStore(dataStore, selector)

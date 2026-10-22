@@ -11,6 +11,8 @@ export interface LoadProgress {
   bytesRead: number
   totalBytes: number
   rowsProcessed: number
+  // 0 while unknown (during parsing)
+  totalRows: number
 }
 
 export interface LoadResult {

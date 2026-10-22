@@ -1,7 +1,18 @@
 import { useDataStore } from '../store/useDataStore'
+import type { LoadProgress } from '../worker/protocol'
 import { Dropzone } from './Dropzone'
 
 const ACCEPT = '.csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain'
+// Share of the bar for parsing; validation fills the rest, so the bar never jumps back
+const PARSING_SHARE = 0.6
+
+function overallPercent({ stage, bytesRead, totalBytes, rowsProcessed, totalRows }: LoadProgress) {
+  const parsed = totalBytes > 0 ? bytesRead / totalBytes : 0
+  const validated = totalRows > 0 ? rowsProcessed / totalRows : 0
+  const share =
+    stage === 'parsing' ? parsed * PARSING_SHARE : PARSING_SHARE + validated * (1 - PARSING_SHARE)
+  return Math.round(share * 100)
+}
 
 export function WelcomeScreen() {
   const progress = useDataStore((s) => s.progress)
@@ -9,9 +20,7 @@ export function WelcomeScreen() {
   const loadFile = useDataStore((s) => s.loadFile)
   const cancelLoad = useDataStore((s) => s.cancelLoad)
 
-  const percent = progress?.totalBytes
-    ? Math.round((progress.bytesRead / progress.totalBytes) * 100)
-    : 0
+  const percent = progress ? overallPercent(progress) : 0
 
   return (
     <div className="flex min-h-screen items-center justify-center p-6">
@@ -31,10 +40,10 @@ export function WelcomeScreen() {
 
         <div aria-live="polite" className="min-h-12 w-full text-sm">
           {progress && (
-            <div className="space-y-2">
+            <div className="space-y-2 transition-opacity duration-300 starting:opacity-0">
               <div className="flex items-center justify-between text-zinc-500 dark:text-zinc-400">
                 <span>
-                  {progress.stage === 'parsing' ? 'Reading file' : 'Checking rows'}… {percent}% ·{' '}
+                  {progress.stage === 'parsing' ? 'Reading file' : 'Analyzing rows'}… {percent}% ·{' '}
                   {progress.rowsProcessed.toLocaleString()} rows
                 </span>
                 <button

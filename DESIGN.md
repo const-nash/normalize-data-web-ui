@@ -7,7 +7,16 @@ Functional core, imperative shell.
 - `src/worker`: the import worker and its typed message protocol. The protocol is the stand-in for a future backend API.
 - `src/store`: Zustand. Holds the dataset and the load state, and owns the load flow.
 - `src/ui`: React components. They read from the store through selectors and call store actions.
-- `src/domain`: pure rules and normalizers (not built yet).
+- `src/domain`: pure types and rules. For now only the `CustomerRow` type and the column list.
+- `src/mock`: temporary mock rows and a simulated load. Removed once the real import is wired up.
+
+### Grid
+
+- `VirtualScroller` is a generic vertical virtualizer. It takes a count, an item size, an optional sticky header and a render function. It does not know what it renders.
+- `Table<TRow>` is a generic grid on top of it. Columns are `{ id, header, cell(row), size }`, so the table does not know the row type. `customerColumns` maps `CustomerRow` to columns.
+- Sizes use the Tailwind spacing scale, not pixels. `rowSize={8}` equals `h-8`, `size={36}` equals `w-36`. Styles use `calc(var(--spacing) * n)`, because class names built at runtime are not picked up by Tailwind. TanStack Virtual needs pixels, so a hidden probe element measures the real row height. It follows root font size and zoom.
+- The viewport size comes from the parent through `className` (for example `h-full`). TanStack measures the scroll element itself.
+- Rows render in normal flow inside one translated wrapper, so wide rows can scroll horizontally.
 
 ### Worker protocol
 
@@ -44,6 +53,9 @@ Why: 200,000 rows fit easily in main thread memory. Edits, undo and index based 
 - Welcome screen with one drop zone. A file can be dropped anywhere on the page.
 - Loading shows the stage, percent, row count and a Cancel button.
 - Light and dark themes follow the device setting through Tailwind's `dark:` variant.
+- One progress bar for both stages: parsing fills the first 60 percent, analysis the rest, so the bar never jumps back.
+- Screen changes cross-fade with the View Transitions API. Without the API the screen switches instantly. Animations are off with `prefers-reduced-motion`.
+- For now the load is simulated: any file shows the same 200 mock rows after a fake parse and analysis. The real worker import is built (see Worker protocol) but not connected yet.
 
 ## Performance approach
 

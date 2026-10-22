@@ -72,7 +72,13 @@ const handlers: Handlers = {
         const now = performance.now()
         if (now - lastReport >= PROGRESS_INTERVAL_MS) {
           lastReport = now
-          progress({ stage: 'parsing', bytesRead, totalBytes: file.size, rowsProcessed: rowCount })
+          progress({
+            stage: 'parsing',
+            bytesRead,
+            totalBytes: file.size,
+            rowsProcessed: rowCount,
+            totalRows: 0,
+          })
         }
       }
       parser.push(decoder.decode(), onRow)
