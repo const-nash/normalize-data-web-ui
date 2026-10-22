@@ -10,28 +10,77 @@
   }
 }
 
-/* Screen change animation, see useViewTransition */
+/* Screen change animation, see useViewTransition.
+   Shared elements morph between screens: app-title (heading) and app-surface (drop zone and
+   table card). Everything else leaves with a blur and enters from below. */
+@theme {
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
 @keyframes screen-out {
   to {
     opacity: 0;
-    transform: scale(0.98);
+    transform: scale(0.94);
+    filter: blur(6px);
   }
 }
 
 @keyframes screen-in {
   from {
     opacity: 0;
-    transform: scale(1.02);
+    transform: translateY(24px) scale(0.98);
+  }
+}
+
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
   }
 }
 
 @media (prefers-reduced-motion: no-preference) {
   ::view-transition-old(root) {
-    animation: 180ms ease-in both screen-out;
+    animation: 260ms var(--ease-out-expo) both screen-out;
   }
 
   ::view-transition-new(root) {
-    animation: 280ms ease-out 60ms both screen-in;
+    animation: 560ms var(--ease-out-expo) 120ms both screen-in;
+  }
+
+  ::view-transition-group(app-title) {
+    animation-duration: 620ms;
+    animation-timing-function: var(--ease-spring);
+  }
+
+  ::view-transition-group(app-surface) {
+    animation-duration: 680ms;
+    animation-timing-function: var(--ease-out-expo);
+    overflow: clip;
+    border-radius: var(--radius-xl);
+  }
+
+  /* Keep the snapshots at their real size, so the card reveals content instead of stretching it */
+  ::view-transition-old(app-surface),
+  ::view-transition-new(app-surface) {
+    height: 100%;
+    object-fit: none;
+  }
+
+  ::view-transition-old(app-surface) {
+    object-position: center;
+    animation: 200ms ease-out both fade-out;
+  }
+
+  ::view-transition-new(app-surface) {
+    object-position: left top;
+    animation: 420ms var(--ease-out-expo) 160ms both fade-in;
   }
 }
 

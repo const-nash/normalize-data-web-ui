@@ -55,7 +55,8 @@ Why: 200,000 rows fit easily in main thread memory. Edits, undo and index based 
 - Loading shows the stage, percent, row count and a Cancel button.
 - Light and dark themes follow the device setting through Tailwind's `dark:` variant.
 - One progress bar for both stages: parsing fills the first 60 percent, analysis the rest, so the bar never jumps back.
-- Screen changes cross-fade with the View Transitions API. Without the API the screen switches instantly. Animations are off with `prefers-reduced-motion`.
+- Screen changes use the View Transitions API. The heading and the drop zone morph into the header title and the table card; the rest blurs out and slides in. Without the API the screen switches instantly. Animations are off with `prefers-reduced-motion`.
+- The progress bar animates `transform: scaleX` with a transition a bit longer than the update interval, so it moves smoothly without layout work.
 - For now the load is simulated: any file shows the same 200 mock rows after a fake parse and analysis. The real worker import is built (see Worker protocol) but not connected yet.
 
 ## Performance approach

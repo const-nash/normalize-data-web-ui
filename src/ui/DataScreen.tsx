@@ -9,7 +9,9 @@ export function DataScreen({ dataset }: { dataset: Dataset }) {
   return (
     <div className="flex h-screen flex-col gap-4 p-4">
       <header className="flex items-center gap-4">
-        <h1 className="text-xl font-semibold">Normalize Data</h1>
+        <h1 className="text-xl font-semibold" style={{ viewTransitionName: 'app-title' }}>
+          Normalize Data
+        </h1>
         <span className="truncate text-sm text-zinc-500 dark:text-zinc-400">
           {dataset.fileName} · {dataset.rows.length.toLocaleString()} rows
         </span>
@@ -21,7 +23,7 @@ export function DataScreen({ dataset }: { dataset: Dataset }) {
           Choose another file
         </button>
       </header>
-      <main className="min-h-0 flex-1">
+      <main className="min-h-0 flex-1" style={{ viewTransitionName: 'app-surface' }}>
         <Table rows={dataset.rows} columns={customerColumns} label="Customers" className="h-full" />
       </main>
     </div>

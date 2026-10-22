@@ -5,6 +5,8 @@ import type { LoadProgress } from '../worker/protocol'
 const PARSE_MS = 1200
 const VALIDATE_MS = 900
 const TICK_MS = 50
+// Lets the progress bar finish its animation before the screen changes
+const HOLD_MS = 400
 
 const sleep = (ms: number, signal: AbortSignal) =>
   new Promise<void>((resolve, reject) => {
@@ -45,4 +47,5 @@ export async function simulateLoad(
       await sleep(TICK_MS, signal)
     }
   }
+  await sleep(HOLD_MS, signal)
 }
