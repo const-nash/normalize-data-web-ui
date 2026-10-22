@@ -26,3 +26,6 @@ dist-ssr
 # Generated data (see CLAUDE.md)
 import-data.csv
 issues-report.json
+
+# Reviewers' data generator, kept out of the repo on purpose (see README)
+scripts/generate-data.mjs

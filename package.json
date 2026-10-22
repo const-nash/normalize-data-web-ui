@@ -13,7 +13,8 @@
     "format:check": "prettier --check .",
     "typecheck": "tsc -b --noEmit",
     "check": "npm run typecheck && npm run lint && npm run test && npm run format:check",
-    "test": "vitest run"
+    "test": "vitest run",
+    "generate": "node scripts/generate-data.mjs"
   },
   "dependencies": {
     "@tanstack/react-virtual": "^3.14.21",
