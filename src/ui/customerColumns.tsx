@@ -1,7 +1,9 @@
-import { mapColumns, findCellIssue } from '../domain/validation'
+import { validateCell } from '../domain/rules/columnRules'
+import { findCellIssue, mapColumns } from '../domain/validation'
 import type { CustomerColumn } from '../domain/customer'
 import { originalValue } from '../store/useDataStore'
 import type { DataState, Dataset } from '../store/useDataStore'
+import { CellEditor } from './CellEditor'
 import { IssueCell } from './IssueCell'
 import { issueCellClass } from './issueCellClass'
 import type { TableColumn } from './Table'
@@ -32,6 +34,7 @@ const UNKNOWN_COLUMN: ColumnLayout = { size: 32, priority: 0 }
 export function columnsForDataset(
   dataset: Dataset,
   history: DataState['history'],
+  onEdit: DataState['editCell'],
 ): Array<TableColumn<number>> {
   const { rows, columns, issues, issueOffsets, changed } = dataset
   const width = columns.length
@@ -55,6 +58,17 @@ export function columnsForDataset(
         />
       ),
       cellClassName: (row) => issueCellClass(issueAt(row), changed[row * width + index] === 1),
+      renderEditor: (row, close) => (
+        <CellEditor
+          initial={rows[row][index] ?? ''}
+          validate={specColumn ? (value) => validateCell(specColumn, value) : undefined}
+          onSave={(value) => {
+            onEdit(row, index, value)
+            close()
+          }}
+          onCancel={close}
+        />
+      ),
       size,
       priority,
     }

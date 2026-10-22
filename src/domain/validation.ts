@@ -92,7 +92,7 @@ export function* validateRows(
   return { ...summarize(issues, issueOffsets, rows.length), missingColumns: missing }
 }
 
-function cellIssue(column: CustomerColumn, value: string, isDuplicate: boolean) {
+export function cellIssue(column: CustomerColumn, value: string, isDuplicate: boolean) {
   const issue = validateCell(column, value)
   // A duplicate outranks fixable issues, but a missing or invalid value stays first
   if (isDuplicate && (!issue || ISSUE_TYPES[issue.type].fixKind !== 'manual')) {
@@ -125,6 +125,53 @@ function summarize(
     else statusCounts.manual++
   }
   return { issues, issueOffsets, rowStatus, statusCounts, issueCounts }
+}
+
+const statusKey = (status: number) =>
+  status === ROW_STATUS.VALID ? 'valid' : status === ROW_STATUS.FIXABLE ? 'fixable' : 'manual'
+
+// Replaces the issues of one row and updates statuses and counts by difference. The arrays are
+// copied, not rebuilt: a few milliseconds for 200,000 rows.
+export function replaceRowIssues(
+  previous: ValidationResult,
+  row: number,
+  rowIssues: IssueRecord[],
+): ValidationResult {
+  const { issues, issueOffsets, rowStatus } = previous
+  const start = issueOffsets[row]
+  const end = issueOffsets[row + 1]
+  const delta = rowIssues.length - (end - start)
+
+  const issueCounts = { ...previous.issueCounts }
+  for (let i = start; i < end; i++) {
+    const type = issues[i].type
+    const count = (issueCounts[type] ?? 0) - 1
+    if (count > 0) issueCounts[type] = count
+    else delete issueCounts[type]
+  }
+  let status: RowStatus = ROW_STATUS.VALID
+  for (const { type, suggestion } of rowIssues) {
+    issueCounts[type] = (issueCounts[type] ?? 0) + 1
+    if (suggestion === undefined) status = ROW_STATUS.MANUAL
+    else if (status === ROW_STATUS.VALID) status = ROW_STATUS.FIXABLE
+  }
+
+  const nextOffsets = issueOffsets.slice()
+  if (delta !== 0) for (let r = row + 1; r < nextOffsets.length; r++) nextOffsets[r] += delta
+  const nextStatus = rowStatus.slice()
+  nextStatus[row] = status
+  const statusCounts = { ...previous.statusCounts }
+  statusCounts[statusKey(rowStatus[row])]--
+  statusCounts[statusKey(status)]++
+
+  return {
+    issues: [...issues.slice(0, start), ...rowIssues, ...issues.slice(end)],
+    issueOffsets: nextOffsets,
+    rowStatus: nextStatus,
+    statusCounts,
+    issueCounts,
+    missingColumns: previous.missingColumns,
+  }
 }
 
 // Removes resolved issues and recounts. Used after automatic fixes: every suggested value passes

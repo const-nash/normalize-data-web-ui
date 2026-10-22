@@ -1,9 +1,10 @@
 // Rows are virtualized, positioned divs, so ARIA grid roles replace table tags (see CLAUDE.md)
 /* oxlint-disable jsx-a11y/prefer-tag-over-role */
-import { useRef } from 'react'
-import type { CSSProperties, ReactNode } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import type { CSSProperties, KeyboardEvent, ReactNode } from 'react'
 import { PROBE_WIDTH, useVisibleColumns } from './useVisibleColumns'
 import { VirtualScroller } from './VirtualScroller'
+import type { VirtualScrollerHandle } from './VirtualScroller'
 
 export interface TableColumn<TRow> {
   id: string
@@ -11,6 +12,8 @@ export interface TableColumn<TRow> {
   cell: (row: TRow) => ReactNode
   // Extra classes for the cell container, for example to mark an invalid value
   cellClassName?: (row: TRow) => string | undefined
+  // Makes the column editable. `close` ends editing and returns focus to the cell.
+  renderEditor?: (row: TRow, close: () => void) => ReactNode
   // Minimum width in Tailwind spacing steps: 32 means the same width as `w-32`
   size?: number
   // Higher numbers stay visible longer when the table gets narrow
@@ -29,6 +32,13 @@ interface TableProps<TRow> {
 }
 
 const DEFAULT_COLUMN_SIZE = 32
+const PAGE_ROWS = 10
+
+interface CellPosition {
+  // Position in the current view and among visible columns
+  row: number
+  col: number
+}
 
 const spacing = (steps: number) => `calc(var(--spacing) * ${steps})`
 
@@ -43,6 +53,11 @@ export function Table<TRow>({
 }: TableProps<TRow>) {
   const containerRef = useRef<HTMLDivElement>(null)
   const probeRef = useRef<HTMLDivElement>(null)
+  const scrollerRef = useRef<VirtualScrollerHandle>(null)
+  const [active, setActive] = useState<CellPosition>({ row: 0, col: 0 })
+  const [editing, setEditing] = useState(false)
+  // Set when focus should follow the active cell after the next render
+  const focusPending = useRef(false)
 
   const sized = columns.map((column) => ({
     size: column.size ?? DEFAULT_COLUMN_SIZE,
@@ -51,6 +66,66 @@ export function Table<TRow>({
   const visibleIndices = useVisibleColumns(sized, containerRef, probeRef)
   const visible = visibleIndices.map((index) => columns[index])
   const sizes = visibleIndices.map((index) => sized[index].size)
+
+  // Keep the active cell inside the grid when rows are filtered or columns hidden
+  const current = {
+    row: Math.min(active.row, Math.max(rowCount - 1, 0)),
+    col: Math.min(active.col, Math.max(visible.length - 1, 0)),
+  }
+
+  useEffect(() => {
+    if (!focusPending.current) return
+    focusPending.current = false
+    // The row may render one frame after scrolling to it
+    requestAnimationFrame(() =>
+      containerRef.current
+        ?.querySelector<HTMLElement>(`[data-cell="${current.row}:${current.col}"]`)
+        ?.focus({ preventScroll: true }),
+    )
+  })
+
+  const moveTo = (row: number, col: number) => {
+    const next = {
+      row: Math.max(0, Math.min(row, rowCount - 1)),
+      col: Math.max(0, Math.min(col, visible.length - 1)),
+    }
+    scrollerRef.current?.scrollToIndex(next.row)
+    focusPending.current = true
+    setActive(next)
+  }
+
+  const closeEditor = () => {
+    setEditing(false)
+    focusPending.current = true
+  }
+
+  const startEditing = (position: CellPosition) => {
+    if (!visible[position.col]?.renderEditor) return
+    setActive(position)
+    setEditing(true)
+  }
+
+  // Spreadsheet keys: arrows, Home/End, PageUp/PageDown move; Enter or F2 edits
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (editing || rowCount === 0) return
+    const { row, col } = current
+    const moves: Record<string, () => void> = {
+      ArrowDown: () => moveTo(row + 1, col),
+      ArrowUp: () => moveTo(row - 1, col),
+      ArrowRight: () => moveTo(row, col + 1),
+      ArrowLeft: () => moveTo(row, col - 1),
+      Home: () => moveTo(row, 0),
+      End: () => moveTo(row, visible.length - 1),
+      PageDown: () => moveTo(row + PAGE_ROWS, col),
+      PageUp: () => moveTo(row - PAGE_ROWS, col),
+      Enter: () => startEditing(current),
+      F2: () => startEditing(current),
+    }
+    const action = moves[e.key]
+    if (!action) return
+    e.preventDefault()
+    action()
+  }
 
   const layout: CSSProperties = {
     gridTemplateColumns: sizes.map((size) => `minmax(${spacing(size)}, 1fr)`).join(' '),
@@ -61,7 +136,7 @@ export function Table<TRow>({
     <div
       role="row"
       aria-rowindex={1}
-      className="sticky top-0 z-10 grid border-b border-zinc-200 bg-zinc-50 text-sm font-semibold text-zinc-600 dark:border-zinc-800 dark:bg-zinc-800 dark:text-zinc-300"
+      className="grid border-b border-zinc-200 bg-zinc-50 text-sm font-semibold text-zinc-600 dark:border-zinc-800 dark:bg-zinc-800 dark:text-zinc-300"
       style={{ ...layout, height: spacing(rowSize) }}
     >
       {visible.map((column) => (
@@ -87,6 +162,8 @@ export function Table<TRow>({
         aria-colcount={visible.length}
         count={rowCount}
         itemSize={rowSize}
+        handleRef={scrollerRef}
+        onKeyDown={handleKeyDown}
         header={header}
         className="h-full rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900"
         renderItem={({ index, style }) => (
@@ -96,15 +173,23 @@ export function Table<TRow>({
             className="grid border-b border-zinc-100 text-sm transition-colors hover:bg-zinc-50 dark:border-zinc-800/60 dark:hover:bg-zinc-800/40"
             style={{ ...layout, ...style }}
           >
-            {visible.map((column) => {
+            {visible.map((column, col) => {
               const row = getRow(index)
+              const isActive = current.row === index && current.col === col
+              const isEditing = isActive && editing
               return (
                 <div
                   key={column.id}
                   role="gridcell"
-                  className={`flex min-w-0 items-center px-4 ${column.cellClassName?.(row) ?? ''}`}
+                  data-cell={`${index}:${col}`}
+                  tabIndex={isActive ? 0 : -1}
+                  onFocus={() => setActive({ row: index, col })}
+                  onDoubleClick={() => startEditing({ row: index, col })}
+                  className={`flex min-w-0 items-center px-4 outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-indigo-500 ${
+                    isEditing ? 'relative z-20 px-1' : (column.cellClassName?.(row) ?? '')
+                  }`}
                 >
-                  {column.cell(row)}
+                  {isEditing ? column.renderEditor?.(row, closeEditor) : column.cell(row)}
                 </div>
               )
             })}

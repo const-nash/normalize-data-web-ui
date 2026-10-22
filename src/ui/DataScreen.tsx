@@ -15,11 +15,15 @@ export function DataScreen({ dataset }: { dataset: Dataset }) {
   const reset = useDataStore((s) => s.reset)
   const undo = useDataStore((s) => s.undo)
   const applyAutoFix = useDataStore((s) => s.applyAutoFix)
+  const editCell = useDataStore((s) => s.editCell)
   const history = useDataStore((s) => s.history)
   const lastChange = history.at(-1)?.label
   const visibleRows = useDataStore((s) => s.visibleRows)
   const [dialogOpen, setDialogOpen] = useState(false)
-  const columns = useMemo(() => columnsForDataset(dataset, history), [dataset, history])
+  const columns = useMemo(
+    () => columnsForDataset(dataset, history, editCell),
+    [dataset, history, editCell],
+  )
   const getRow = useCallback((index: number) => visibleRows[index], [visibleRows])
 
   const handleApply = (mode: FixMode) => {

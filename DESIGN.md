@@ -69,7 +69,26 @@ Why: 200,000 rows fit easily in main thread memory. Edits, undo and index based 
 - Screen changes use the View Transitions API. The heading and the drop zone morph into the header title and the table card; the rest blurs out and slides in. Without the API the screen switches instantly. Animations are off with `prefers-reduced-motion`.
 - The progress bar animates `transform: scaleX` with a transition a bit longer than the update interval, so it moves smoothly without layout work.
 
+### Editing: options considered
+
+Chosen: inline editing in the cell. It is what CLAUDE.md asks for, it matches how people use spreadsheets, and it covers the main case: one wrong value, fixed on the spot.
+
+- Double click, Enter or F2 opens an input in place. Enter or leaving the field saves, Escape cancels. Arrow keys, Home/End and PageUp/PageDown move between cells.
+- While typing, a hint below the cell says whether the value is fine, or what is wrong and what a good value looks like. When the rule has a suggested value, "Use DE" applies it in one click.
+- After saving, only the row and the duplicate groups it left or joined are revalidated; counts change by difference. Each edit is one history entry with Undo. Rows stay in place until the filter changes, so an edited row does not jump away.
+
+Considered, not built yet:
+
+- Row card: clicking a row opens a side panel with all fields as a form, each with its issue and a "Use" button. Shows columns hidden on narrow screens and suits rows with several issues. Next candidate.
+- Fix one by one: pick an issue type in the overview and step through its cells: problem, example, input, "Save & next". The clearest flow for non-technical users with many manual issues.
+- Apply to all similar: after fixing a value by hand, offer to apply the same change to every cell with the same original value (for example all "Deutschland" to DE).
+- Find and replace in one column, with a preview like the automatic fix.
+- AI suggestions for manual issues (names, unknown countries), always shown as a suggestion to confirm, never applied silently.
+- Edit in a dialog per cell: simple, but slower and hides the table context.
+
 ## Performance approach
+
+- Cell edit, measured on 200,000 rows: the first edit builds the duplicate index on the main thread (about 40 ms), later edits take 5 to 15 ms, undo about 1 ms. Issue arrays are copied with the row's issues replaced, instead of revalidating all rows.
 
 - Automatic fix on the main thread, measured on 200,000 rows with 275,000 fixes: about 42 ms, undo about 10 ms. Every suggested value passes its rule (tested), so fixed issues are removed and counts recomputed instead of running the rules again. Changed cells are a `Uint8Array` mask; old values are found by binary search in the history patches.
 

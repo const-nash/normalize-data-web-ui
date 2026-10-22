@@ -11,6 +11,8 @@ import {
   rowsWithIssue,
 } from '../domain/filter'
 import type { QuickFilter } from '../domain/filter'
+import { buildDuplicateIndexes, editCell } from '../domain/editCell'
+import type { DuplicateIndexes } from '../domain/editCell'
 import { checkImportFile } from '../domain/importFile'
 import type { IssueId } from '../domain/rules/issueTypes'
 import { removeIssues } from '../domain/validation'
@@ -55,6 +57,7 @@ export interface DataState extends ViewState {
   setQuickFilter: (quickFilter: QuickFilter) => void
   setIssueType: (issueType: IssueId | null) => void
   applyAutoFix: (mode: FixMode) => number
+  editCell: (row: number, column: number, value: string) => void
   undo: () => void
   loadFile: (file: File) => Promise<void>
   cancelLoad: () => void
@@ -64,6 +67,8 @@ export interface DataState extends ViewState {
 let loadController: AbortController | null = null
 // Built on the first search, not part of reactive state
 let searchIndex: string[] | null = null
+// Built on the first edit, kept in sync by edits, dropped when rows change in other ways
+let duplicateIndexes: DuplicateIndexes | null = null
 
 const VIEW_RESET: ViewState = { search: '', quickFilter: QUICK_FILTER.ALL, issueType: null }
 
@@ -114,6 +119,7 @@ export const dataStore = createStore<DataState>()((set, get) => {
   // Replaces the dataset after a change of rows, keeping the current view
   const commitDataset = (dataset: Dataset, history: HistoryEntry[]) => {
     searchIndex = null
+    duplicateIndexes = null
     let view: ViewState = get()
     // The chosen issue type may be gone after a fix
     if (view.issueType && !dataset.issueCounts[view.issueType]) view = { ...view, issueType: null }
@@ -151,6 +157,40 @@ export const dataStore = createStore<DataState>()((set, get) => {
       const validation = removeIssues(dataset, new Set(fixes.map((fix) => fix.issue)))
       commitDataset({ ...dataset, ...validation, rows, changed }, [...history, entry])
       return fixes.length
+    },
+
+    editCell: (row, column, value) => {
+      const { dataset, history } = get()
+      if (!dataset) return
+      duplicateIndexes ??= buildDuplicateIndexes(dataset.columns, dataset.rows)
+      const result = editCell(
+        {
+          header: dataset.columns,
+          rows: dataset.rows,
+          validation: dataset,
+          indexes: duplicateIndexes,
+        },
+        row,
+        column,
+        value,
+      )
+      if (!result) return
+
+      const changed = dataset.changed.slice()
+      changed[row * dataset.columns.length + column] = 1
+      const entry: HistoryEntry = {
+        label: `Edited ${dataset.columns[column]} in row ${(row + 1).toLocaleString()}`,
+        patches: [result.patch],
+        validation: validationOf(dataset),
+        changed: dataset.changed,
+      }
+      if (searchIndex) searchIndex[row] = buildSearchIndex([result.rows[row]])[0]
+      // The visible rows stay as they are, so an edited row does not jump away from the user.
+      // Filters apply again on the next filter change.
+      set({
+        dataset: { ...dataset, ...result.validation, rows: result.rows, changed },
+        history: [...history, entry],
+      })
     },
 
     undo: () => {
@@ -223,6 +263,7 @@ export const dataStore = createStore<DataState>()((set, get) => {
           rowStatus: result.rowStatus as Uint8Array<ArrayBuffer>,
         }
         searchIndex = null
+        duplicateIndexes = null
         set({
           dataset,
           history: [],
@@ -245,6 +286,7 @@ export const dataStore = createStore<DataState>()((set, get) => {
 
     reset: () => {
       searchIndex = null
+      duplicateIndexes = null
       set({
         dataset: null,
         history: [],
