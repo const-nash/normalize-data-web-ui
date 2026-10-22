@@ -16,7 +16,9 @@ export interface TableColumn<TRow> {
 }
 
 interface TableProps<TRow> {
-  rows: readonly TRow[]
+  rowCount: number
+  // Row at a position in the current view, so callers can pass filtered or sorted views
+  getRow: (index: number) => TRow
   columns: ReadonlyArray<TableColumn<TRow>>
   label: string
   // Row height in Tailwind spacing steps
@@ -29,7 +31,14 @@ const DEFAULT_COLUMN_SIZE = 32
 const spacing = (steps: number) => `calc(var(--spacing) * ${steps})`
 
 // Generic virtualized grid. Knows nothing about the row type it renders.
-export function Table<TRow>({ rows, columns, label, rowSize = 12, className }: TableProps<TRow>) {
+export function Table<TRow>({
+  rowCount,
+  getRow,
+  columns,
+  label,
+  rowSize = 12,
+  className,
+}: TableProps<TRow>) {
   const containerRef = useRef<HTMLDivElement>(null)
   const probeRef = useRef<HTMLDivElement>(null)
 
@@ -72,9 +81,9 @@ export function Table<TRow>({ rows, columns, label, rowSize = 12, className }: T
       <VirtualScroller
         role="grid"
         aria-label={label}
-        aria-rowcount={rows.length + 1}
+        aria-rowcount={rowCount + 1}
         aria-colcount={visible.length}
-        count={rows.length}
+        count={rowCount}
         itemSize={rowSize}
         header={header}
         className="h-full rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900"
@@ -87,7 +96,7 @@ export function Table<TRow>({ rows, columns, label, rowSize = 12, className }: T
           >
             {visible.map((column) => (
               <div key={column.id} role="gridcell" className="flex min-w-0 items-center px-4">
-                <span className="truncate">{column.cell(rows[index])}</span>
+                <span className="truncate">{column.cell(getRow(index))}</span>
               </div>
             ))}
           </div>

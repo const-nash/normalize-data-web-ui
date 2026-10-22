@@ -1,12 +1,18 @@
 import type { Dataset } from '../store/useDataStore'
 import { useDataStore } from '../store/useDataStore'
-import { useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 import { columnsForHeader } from './customerColumns'
+import { FilterBar } from './FilterBar'
 import { Table } from './Table'
 
 export function DataScreen({ dataset }: { dataset: Dataset }) {
   const reset = useDataStore((s) => s.reset)
+  const visibleRows = useDataStore((s) => s.visibleRows)
   const columns = useMemo(() => columnsForHeader(dataset.columns), [dataset.columns])
+  const getRow = useCallback(
+    (index: number) => dataset.rows[visibleRows[index]],
+    [dataset, visibleRows],
+  )
 
   return (
     <div className="flex h-screen flex-col gap-4 p-4">
@@ -25,8 +31,20 @@ export function DataScreen({ dataset }: { dataset: Dataset }) {
           Choose another file
         </button>
       </header>
-      <main className="min-h-0 flex-1" style={{ viewTransitionName: 'app-surface' }}>
-        <Table rows={dataset.rows} columns={columns} label="Customers" className="h-full" />
+      <FilterBar dataset={dataset} />
+      <main className="relative min-h-0 flex-1" style={{ viewTransitionName: 'app-surface' }}>
+        <Table
+          rowCount={visibleRows.length}
+          getRow={getRow}
+          columns={columns}
+          label="Customers"
+          className="h-full"
+        />
+        {visibleRows.length === 0 && (
+          <p className="pointer-events-none absolute inset-x-0 top-24 text-center text-sm text-zinc-500 dark:text-zinc-400">
+            No rows match your search and filter.
+          </p>
+        )}
       </main>
     </div>
   )

@@ -11,6 +11,7 @@ Functional core, imperative shell.
 - `src/domain/csv`: chunked CSV parser on PapaParse. `createCsvChunkParser` takes text slices and completes rows split between them. `parseCsvStream` and `parseCsvBlob` read bytes with a streaming `TextDecoder`, so characters split between chunks stay intact. The module knows nothing about workers or threads. PapaParse's own file reader and worker mode are not used: the file reader decodes each byte slice separately (breaks multi-byte characters) and needs `FileReader`, which Node lacks.
 - `src/domain/rules`: column rules. `columnRules.ts` has one rule per column: it takes a raw value and returns the most important issue or null, with a suggested value for safe and suggested fixes. `issueTypes.ts` is the issue catalog (column, title, explanation, good example, fix kind). Helpers parse dates, countries and amounts. Uniqueness of customer_id and email is checked across rows later by the duplicate index.
 - `src/domain/validation.ts`: validates all rows. Maps the header to spec columns, builds the duplicate indexes for customer_id and email, runs the column rules and sorts each row into valid, fixable or manual. A row is fixable when every issue has a suggested value; suggested fixes are confirmed through a preview before they are applied. It is a generator, so the worker can pause between slices and handle cancel.
+- `src/domain/filter.ts`: search and quick filters. The result is a `Uint32Array` of row indices; rows are never copied. The grid takes a row count and `getRow(i)`, so it renders any view.
 - `src/constants`: shared constants: file extensions, byte sizes and all error texts. Error texts are templates with `{name}` placeholders, filled in by `formatMessage`. Placeholder names are inferred from the template, so a missing or extra parameter is a type error.
 
 ### Grid
@@ -57,12 +58,15 @@ Why: 200,000 rows fit easily in main thread memory. Edits, undo and index based 
 
 - Welcome screen with one drop zone. A file can be dropped anywhere on the page.
 - Loading shows the stage, percent, row count and a Cancel button.
+- Filter bar above the grid: a search over all columns (case-insensitive substring) and quick filters All, With issues, Needs manual fix, Auto-fixable, Only valid with row counts. Clearing the search applies at once, without the debounce.
 - Light and dark themes follow the device setting through Tailwind's `dark:` variant.
 - One progress bar for all stages. Each stage gets a fixed share, so the bar never jumps back. Until validation exists, parsing fills the whole bar. The bar is held at 100 percent for 300 ms before the screen changes.
 - Screen changes use the View Transitions API. The heading and the drop zone morph into the header title and the table card; the rest blurs out and slides in. Without the API the screen switches instantly. Animations are off with `prefers-reduced-motion`.
 - The progress bar animates `transform: scaleX` with a transition a bit longer than the update interval, so it moves smoothly without layout work.
 
 ## Performance approach
+
+- Search is debounced (250 ms). On the first search a lowercase string per row is built (cells joined with a separator that never appears in text, so matches cannot span columns). Measured on 200,000 rows: building it takes about 28 ms once, a search about 3 ms.
 
 - Parsing runs in the worker. The file is streamed, not read into one string.
 - Chunks of 5,000 rows. Measured in Node with 200,000 messy rows: parsing about 180 ms, validation about 340 ms, the longest main thread stall about 16 ms with 10,000 issues per chunk (now 5,000).
@@ -96,6 +100,7 @@ Why: 200,000 rows fit easily in main thread memory. Edits, undo and index based 
 - tailwindcss, @tailwindcss/vite: utility styling, required by the brief.
 - oxlint: fast linter from the Vite template.
 - prettier: consistent formatting.
+- lodash.debounce: debounced search input. Only this standalone function, not the full lodash.
 - vitest: unit tests for `src/domain`, shares the Vite config.
 - prettier-plugin-tailwindcss: stable class order, which keeps diffs small.
 

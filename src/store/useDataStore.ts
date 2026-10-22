@@ -1,6 +1,8 @@
 import { useStore } from 'zustand'
 import { createStore } from 'zustand/vanilla'
 import { ERROR_MESSAGE } from '../constants/errorMessages'
+import { QUICK_FILTER, buildSearchIndex, filterRows, normalizeQuery } from '../domain/filter'
+import type { QuickFilter } from '../domain/filter'
 import { checkImportFile } from '../domain/importFile'
 import type { IssueRecord, ValidationSummary } from '../domain/validation'
 import { getImportWorker, isAbortError } from '../worker/client'
@@ -21,6 +23,12 @@ export interface Dataset extends ValidationSummary {
 
 export interface DataState {
   dataset: Dataset | null
+  // View state: the grid renders `visibleRows`, indices into dataset.rows
+  search: string
+  quickFilter: QuickFilter
+  visibleRows: Uint32Array
+  setSearch: (search: string) => void
+  setQuickFilter: (quickFilter: QuickFilter) => void
   progress: LoadProgress | null
   error: string | null
   loadFile: (file: File) => Promise<void>
@@ -29,6 +37,17 @@ export interface DataState {
 }
 
 let loadController: AbortController | null = null
+// Built on the first search, not part of reactive state
+let searchIndex: string[] | null = null
+
+const VIEW_RESET = { search: '', quickFilter: QUICK_FILTER.ALL } as const
+
+function computeView(dataset: Dataset | null, search: string, quickFilter: QuickFilter) {
+  if (!dataset) return new Uint32Array()
+  const query = normalizeQuery(search)
+  if (query !== '') searchIndex ??= buildSearchIndex(dataset.rows)
+  return filterRows({ rowStatus: dataset.rowStatus, quickFilter, query, searchIndex })
+}
 
 const settle = (signal: AbortSignal) =>
   new Promise<void>((resolve, reject) => {
@@ -43,8 +62,21 @@ const settle = (signal: AbortSignal) =>
     )
   })
 
-export const dataStore = createStore<DataState>()((set) => ({
+export const dataStore = createStore<DataState>()((set, get) => ({
   dataset: null,
+  ...VIEW_RESET,
+  visibleRows: new Uint32Array(),
+
+  setSearch: (search) => {
+    const { dataset, quickFilter } = get()
+    set({ search, visibleRows: computeView(dataset, search, quickFilter) })
+  },
+
+  setQuickFilter: (quickFilter) => {
+    const { dataset, search } = get()
+    set({ quickFilter, visibleRows: computeView(dataset, search, quickFilter) })
+  },
+
   progress: null,
   error: null,
 
@@ -97,7 +129,13 @@ export const dataStore = createStore<DataState>()((set) => ({
         },
       })
       await settle(controller.signal)
-      set({ dataset: { fileName: file.name, rows, issues, ...result } })
+      const dataset: Dataset = { fileName: file.name, rows, issues, ...result }
+      searchIndex = null
+      set({
+        dataset,
+        ...VIEW_RESET,
+        visibleRows: computeView(dataset, VIEW_RESET.search, VIEW_RESET.quickFilter),
+      })
     } catch (err) {
       if (isAbortError(err)) return
       set({ error: err instanceof Error ? err.message : ERROR_MESSAGE.FILE_READ_FAILED })
@@ -112,7 +150,13 @@ export const dataStore = createStore<DataState>()((set) => ({
   cancelLoad: () =>
     loadController?.abort(new DOMException(ERROR_MESSAGE.LOAD_CANCELLED, 'AbortError')),
 
-  reset: () => set({ dataset: null, error: null }),
+  reset: () => {
+    searchIndex = null
+    set({ dataset: null, error: null, ...VIEW_RESET, visibleRows: new Uint32Array() })
+  },
 }))
 
-export const useDataStore = <T>(selector: (state: DataState) => T) => useStore(dataStore, selector)
+export const useDataStore = Object.assign(
+  <T>(selector: (state: DataState) => T) => useStore(dataStore, selector),
+  { getState: dataStore.getState },
+)

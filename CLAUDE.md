@@ -8,11 +8,11 @@ This is a time-boxed case study (2 to 4 hours in total). The reviewers value a s
 
 ## Stack
 
-React, TypeScript, Vite, Tailwind CSS v4, Zustand, PapaParse, TanStack Virtual, Vitest.
+React, TypeScript, Vite, Tailwind CSS v4, Zustand, PapaParse, TanStack Virtual, Vitest, lodash.debounce.
 
 Do not add any other dependency without asking me first. Every dependency needs a one-line reason in DESIGN.md.
 
-Not used on purpose: TanStack Table, AG Grid, router, UI kit, date libraries, lodash, immer, react-dropzone.
+Not used on purpose: TanStack Table, AG Grid, router, UI kit, date libraries, lodash (the full library; the standalone lodash.debounce is allowed), immer, react-dropzone.
 
 ## Commands
 
