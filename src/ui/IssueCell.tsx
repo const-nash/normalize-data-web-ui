@@ -4,11 +4,22 @@ import type { IssueRecord } from '../domain/validation'
 interface IssueCellProps {
   value: string
   issue?: IssueRecord
+  // Value before a fix changed this cell
+  original?: string
 }
 
 // Renders a cell value as plain text. With an issue it adds the reason as a tooltip and for
 // screen readers, and shows the suggested value when there is one.
-export function IssueCell({ value, issue }: IssueCellProps) {
+export function IssueCell({ value, issue, original }: IssueCellProps) {
+  if (!issue && original !== undefined) {
+    const was = `Fixed automatically. Was: ${original === '' ? 'empty' : original}`
+    return (
+      <span className="truncate text-emerald-900 dark:text-emerald-100" title={was}>
+        {value}
+        <span className="sr-only"> ({was})</span>
+      </span>
+    )
+  }
   if (!issue) return <span className="truncate">{value}</span>
 
   const { title, explanation } = ISSUE_TYPES[issue.type]

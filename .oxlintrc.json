@@ -59,7 +59,7 @@
     "jsx-a11y/aria-role": "error",
     "jsx-a11y/aria-unsupported-elements": "error",
     "jsx-a11y/role-has-required-aria-props": "error",
-    "jsx-a11y/label-has-associated-control": "warn",
+    "jsx-a11y/label-has-associated-control": ["warn", { "depth": 3 }],
     "jsx-a11y/click-events-have-key-events": "warn",
     "jsx-a11y/no-static-element-interactions": "warn",
     "jsx-a11y/no-autofocus": "warn",

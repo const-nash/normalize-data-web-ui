@@ -1,6 +1,7 @@
 import { mapColumns, findCellIssue } from '../domain/validation'
 import type { CustomerColumn } from '../domain/customer'
-import type { Dataset } from '../store/useDataStore'
+import { originalValue } from '../store/useDataStore'
+import type { DataState, Dataset } from '../store/useDataStore'
 import { IssueCell } from './IssueCell'
 import { issueCellClass } from './issueCellClass'
 import type { TableColumn } from './Table'
@@ -28,8 +29,12 @@ const UNKNOWN_COLUMN: ColumnLayout = { size: 32, priority: 0 }
 
 // Builds table columns from the file header, in file order. A table row is a row index into
 // the dataset, so a cell can look up both its value and its issue.
-export function columnsForDataset(dataset: Dataset): Array<TableColumn<number>> {
-  const { rows, columns, issues, issueOffsets } = dataset
+export function columnsForDataset(
+  dataset: Dataset,
+  history: DataState['history'],
+): Array<TableColumn<number>> {
+  const { rows, columns, issues, issueOffsets, changed } = dataset
+  const width = columns.length
   const specColumnAt = new Map<number, CustomerColumn>()
   for (const [column, index] of mapColumns(columns).positions) specColumnAt.set(index, column)
 
@@ -42,8 +47,14 @@ export function columnsForDataset(dataset: Dataset): Array<TableColumn<number>> 
     return {
       id: `${index}:${name}`,
       header: name,
-      cell: (row) => <IssueCell value={rows[row][index] ?? ''} issue={issueAt(row)} />,
-      cellClassName: (row) => issueCellClass(issueAt(row)),
+      cell: (row) => (
+        <IssueCell
+          value={rows[row][index] ?? ''}
+          issue={issueAt(row)}
+          original={changed[row * width + index] ? originalValue(history, row, index) : undefined}
+        />
+      ),
+      cellClassName: (row) => issueCellClass(issueAt(row), changed[row * width + index] === 1),
       size,
       priority,
     }

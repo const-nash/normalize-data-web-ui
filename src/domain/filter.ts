@@ -1,5 +1,6 @@
+import type { IssueId } from './rules/issueTypes'
 import { ROW_STATUS } from './validation'
-import type { Row } from './validation'
+import type { IssueRecord, Row } from './validation'
 
 export const QUICK_FILTER = {
   ALL: 'all',
@@ -35,16 +36,26 @@ interface FilterInput {
   query: string
   // Required when query is not empty
   searchIndex: readonly string[] | null
+  // 1 for rows to keep, from rowsWithIssue; null keeps all
+  rowMask?: Uint8Array | null
+}
+
+// Marks the rows that have an issue of the given type
+export function rowsWithIssue(issues: readonly IssueRecord[], type: IssueId, rowCount: number) {
+  const mask = new Uint8Array(rowCount)
+  for (const issue of issues) if (issue.type === type) mask[issue.row] = 1
+  return mask
 }
 
 // Indices of the rows that pass the quick filter and contain the query in any column.
 // Rows themselves are never copied.
-export function filterRows({ rowStatus, quickFilter, query, searchIndex }: FilterInput) {
+export function filterRows({ rowStatus, quickFilter, query, searchIndex, rowMask }: FilterInput) {
   const passesStatus = matchesStatus[quickFilter]
   const result = new Uint32Array(rowStatus.length)
   let count = 0
   for (let row = 0; row < rowStatus.length; row++) {
     if (!passesStatus(rowStatus[row])) continue
+    if (rowMask && rowMask[row] === 0) continue
     if (query !== '' && !searchIndex?.[row].includes(query)) continue
     result[count++] = row
   }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { QUICK_FILTER, buildSearchIndex, filterRows, normalizeQuery } from './filter'
+import { QUICK_FILTER, buildSearchIndex, filterRows, normalizeQuery, rowsWithIssue } from './filter'
 import { ROW_STATUS } from './validation'
 
 const rows = [
@@ -46,5 +46,24 @@ describe('filterRows', () => {
 
   it('returns nothing when nothing matches', () => {
     expect(run(QUICK_FILTER.ALL, 'zzz')).toEqual([])
+  })
+})
+
+describe('rowsWithIssue', () => {
+  it('keeps only rows with the selected issue type', () => {
+    const issues = [
+      { row: 1, column: 'plan', type: 'plan.format', suggestion: 'pro' },
+      { row: 3, column: 'plan', type: 'plan.format', suggestion: 'pro' },
+      { row: 2, column: 'email', type: 'email.invalid' },
+    ] as const
+    const rowMask = rowsWithIssue(issues, 'plan.format', 4)
+    const result = filterRows({
+      rowStatus,
+      quickFilter: QUICK_FILTER.ALL,
+      query: '',
+      searchIndex,
+      rowMask,
+    })
+    expect([...result]).toEqual([1, 3])
   })
 })

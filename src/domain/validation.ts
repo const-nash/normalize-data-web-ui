@@ -73,48 +73,113 @@ export function* validateRows(
     ),
   }
 
-  const issues: IssueRecord[] = []
-  const rowStatus = new Uint8Array(rows.length)
-  const issueOffsets = new Uint32Array(rows.length + 1)
-  const statusCounts = { valid: 0, fixable: 0, manual: 0 }
-  const issueCounts: Partial<Record<IssueId, number>> = {}
   const columns = [...positions]
+  const issues: IssueRecord[] = []
+  const issueOffsets = new Uint32Array(rows.length + 1)
 
   for (let row = 0; row < rows.length; row++) {
-    let status: RowStatus = ROW_STATUS.VALID
     issueOffsets[row] = issues.length
-
     for (const [column, position] of columns) {
-      let issue = validateCell(column, rows[row][position] ?? '')
-
-      // A duplicate outranks fixable issues, but a missing or invalid value stays first
-      if (
-        (column === 'customer_id' || column === 'email') &&
-        duplicates[column].has(row) &&
-        (!issue || ISSUE_TYPES[issue.type].fixKind !== 'manual')
-      ) {
-        issue = { type: `${column}.duplicate` }
-      }
-      if (!issue) continue
-
-      issues.push({ row, column, ...issue })
-      issueCounts[issue.type] = (issueCounts[issue.type] ?? 0) + 1
-      status =
-        issue.suggestion === undefined
-          ? ROW_STATUS.MANUAL
-          : (Math.max(status, ROW_STATUS.FIXABLE) as RowStatus)
+      const isDuplicate =
+        (column === 'customer_id' || column === 'email') && duplicates[column].has(row)
+      const issue = cellIssue(column, rows[row][position] ?? '', isDuplicate)
+      if (issue) issues.push({ row, column, ...issue })
     }
+    if ((row + 1) % yieldEvery === 0) yield row + 1
+  }
+  issueOffsets[rows.length] = issues.length
 
+  return { ...summarize(issues, issueOffsets, rows.length), missingColumns: missing }
+}
+
+function cellIssue(column: CustomerColumn, value: string, isDuplicate: boolean) {
+  const issue = validateCell(column, value)
+  // A duplicate outranks fixable issues, but a missing or invalid value stays first
+  if (isDuplicate && (!issue || ISSUE_TYPES[issue.type].fixKind !== 'manual')) {
+    return { type: `${column as 'customer_id' | 'email'}.duplicate` } as const
+  }
+  return issue
+}
+
+// Row statuses and counts derived from the issue list
+function summarize(
+  issues: IssueRecord[],
+  issueOffsets: Uint32Array<ArrayBuffer>,
+  rowCount: number,
+) {
+  const rowStatus = new Uint8Array(rowCount)
+  const statusCounts = { valid: 0, fixable: 0, manual: 0 }
+  const issueCounts: Partial<Record<IssueId, number>> = {}
+
+  for (let row = 0; row < rowCount; row++) {
+    let status: RowStatus = ROW_STATUS.VALID
+    for (let i = issueOffsets[row]; i < issueOffsets[row + 1]; i++) {
+      const { type, suggestion } = issues[i]
+      issueCounts[type] = (issueCounts[type] ?? 0) + 1
+      if (suggestion === undefined) status = ROW_STATUS.MANUAL
+      else if (status === ROW_STATUS.VALID) status = ROW_STATUS.FIXABLE
+    }
     rowStatus[row] = status
     if (status === ROW_STATUS.VALID) statusCounts.valid++
     else if (status === ROW_STATUS.FIXABLE) statusCounts.fixable++
     else statusCounts.manual++
-
-    if ((row + 1) % yieldEvery === 0) yield row + 1
   }
+  return { issues, issueOffsets, rowStatus, statusCounts, issueCounts }
+}
 
+// Removes resolved issues and recounts. Used after automatic fixes: every suggested value passes
+// its rule (see the column rule tests), so a fixed cell has no issue left and the other cells of
+// the row are unchanged. Much cheaper than running the rules again.
+export function removeIssues(
+  previous: ValidationResult,
+  resolved: ReadonlySet<number>,
+): ValidationResult {
+  const rowCount = previous.rowStatus.length
+  const issues: IssueRecord[] = []
+  const issueOffsets = new Uint32Array(rowCount + 1)
+  for (let row = 0; row < rowCount; row++) {
+    issueOffsets[row] = issues.length
+    for (let i = previous.issueOffsets[row]; i < previous.issueOffsets[row + 1]; i++) {
+      if (!resolved.has(i)) issues.push(previous.issues[i])
+    }
+  }
+  issueOffsets[rowCount] = issues.length
+  return { ...summarize(issues, issueOffsets, rowCount), missingColumns: previous.missingColumns }
+}
+
+// Revalidates only `changedRows` and keeps the issues of all other rows. Duplicate flags of
+// changed cells are kept as they were: the duplicate index is not rebuilt here.
+export function revalidateRows(
+  header: readonly string[],
+  rows: readonly Row[],
+  previous: ValidationResult,
+  changedRows: ReadonlySet<number>,
+): ValidationResult {
+  const { positions } = mapColumns(header)
+  const columns = [...positions]
+  const issues: IssueRecord[] = []
+  const issueOffsets = new Uint32Array(rows.length + 1)
+
+  for (let row = 0; row < rows.length; row++) {
+    issueOffsets[row] = issues.length
+    if (!changedRows.has(row)) {
+      for (let i = previous.issueOffsets[row]; i < previous.issueOffsets[row + 1]; i++) {
+        issues.push(previous.issues[i])
+      }
+      continue
+    }
+    for (const [column, position] of columns) {
+      const old = findCellIssue(previous.issues, previous.issueOffsets, row, column)
+      const issue = cellIssue(column, rows[row][position] ?? '', !!old?.type.endsWith('.duplicate'))
+      if (issue) issues.push({ row, column, ...issue })
+    }
+  }
   issueOffsets[rows.length] = issues.length
-  return { issues, rowStatus, issueOffsets, statusCounts, issueCounts, missingColumns: missing }
+
+  return {
+    ...summarize(issues, issueOffsets, rows.length),
+    missingColumns: previous.missingColumns,
+  }
 }
 
 // The issue of one cell, found through the per-row offsets

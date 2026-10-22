@@ -61,12 +61,17 @@ Why: 200,000 rows fit easily in main thread memory. Edits, undo and index based 
 - Loading shows the stage, percent, row count and a Cancel button.
 - Filter bar above the grid: a search over all columns (case-insensitive substring) and quick filters All, With issues, Needs manual fix, Auto-fixable, Only valid with row counts. Clearing the search applies at once, without the debounce.
 - Cells with issues are marked subtly, because many cells can have issues at once: a light red background and a thin left bar for manual fixes, light amber for fixable ones with the suggested value shown after an arrow (`Germany → DE`). Empty values show a muted "empty". The tooltip and screen reader text give the issue title and explanation. The issues overview (next step) remains the main entry point.
+- Issues overview next to the grid: row counts (valid, auto-fixable, manual), then one item per issue type, grouped into "Can be fixed automatically" and "Needs your input", most frequent first. Each item shows the title, a plain explanation, the column and a good example. Clicking an item shows only rows with that issue; clicking again clears it.
+- "Fix automatically" opens a native `<dialog>` with two modes: only rows without manual issues (they become valid), or every value that has a suggestion. It shows a summary per issue type with examples, marks assumptions (suggested fixes) and lists the affected cells before and after. Applying is one history entry; Undo restores it. Fixed cells are marked green with the old value in the tooltip.
+- Scope note: CLAUDE.md asks for exactly one bulk fix (country normalization). On request this was widened to a general automatic fix over all safe and suggested issues.
 - Light and dark themes follow the device setting through Tailwind's `dark:` variant.
 - One progress bar for all stages. Each stage gets a fixed share, so the bar never jumps back. Until validation exists, parsing fills the whole bar. The bar is held at 100 percent for 300 ms before the screen changes.
 - Screen changes use the View Transitions API. The heading and the drop zone morph into the header title and the table card; the rest blurs out and slides in. Without the API the screen switches instantly. Animations are off with `prefers-reduced-motion`.
 - The progress bar animates `transform: scaleX` with a transition a bit longer than the update interval, so it moves smoothly without layout work.
 
 ## Performance approach
+
+- Automatic fix on the main thread, measured on 200,000 rows with 275,000 fixes: about 42 ms, undo about 10 ms. Every suggested value passes its rule (tested), so fixed issues are removed and counts recomputed instead of running the rules again. Changed cells are a `Uint8Array` mask; old values are found by binary search in the history patches.
 
 - Search is debounced (250 ms). On the first search a lowercase string per row is built (cells joined with a separator that never appears in text, so matches cannot span columns). Measured on 200,000 rows: building it takes about 28 ms once, a search about 3 ms.
 
