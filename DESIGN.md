@@ -17,6 +17,7 @@ Functional core, imperative shell.
 - Sizes use the Tailwind spacing scale, not pixels. `rowSize={8}` equals `h-8`, `size={36}` equals `w-36`. Styles use `calc(var(--spacing) * n)`, because class names built at runtime are not picked up by Tailwind. TanStack Virtual needs pixels, so a hidden probe element measures the real row height. It follows root font size and zoom.
 - The viewport size comes from the parent through `className` (for example `h-full`). TanStack measures the scroll element itself.
 - Rows render in normal flow inside one translated wrapper, so wide rows can scroll horizontally.
+- Responsive columns: each column has a minimum `size` and a `priority`. Columns share free space with `1fr` and shrink down to their minimum. When they no longer fit, the table hides the lowest priority columns first. It measures its own container, not the window, so it works in any layout. At least one column stays visible. Hidden columns cannot be viewed yet; a way to reveal them is an open question.
 
 ### Worker protocol
 
