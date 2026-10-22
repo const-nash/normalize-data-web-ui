@@ -1,6 +1,8 @@
 import { useStore } from 'zustand'
 import { createStore } from 'zustand/vanilla'
 import type { CustomerRow } from '../domain/customer'
+import { ERROR_MESSAGE } from '../constants/errorMessages'
+import { checkImportFile } from '../domain/importFile'
 import { createMockCustomers } from '../mock/customers'
 import { simulateLoad } from '../mock/simulateLoad'
 import { isAbortError } from '../worker/client'
@@ -29,8 +31,15 @@ export const dataStore = createStore<DataState>()((set) => ({
   progress: null,
   error: null,
 
-  // Simulated for now: any file shows the same mock rows after a fake parse and analysis
+  // Simulated for now: any valid file shows the same mock rows after a fake parse and analysis
   loadFile: async (file) => {
+    // Checked before anything else, so a rejected file never cancels a running load
+    const error = checkImportFile(file)
+    if (error) {
+      set({ error })
+      return
+    }
+
     loadController?.abort()
     const controller = new AbortController()
     loadController = controller
@@ -41,7 +50,7 @@ export const dataStore = createStore<DataState>()((set) => ({
       set({ dataset: { fileName: file.name, rows: createMockCustomers(MOCK_ROW_COUNT) } })
     } catch (err) {
       if (isAbortError(err)) return
-      set({ error: err instanceof Error ? err.message : 'Could not read the file.' })
+      set({ error: err instanceof Error ? err.message : ERROR_MESSAGE.FILE_READ_FAILED })
     } finally {
       if (loadController === controller) {
         loadController = null
@@ -50,7 +59,8 @@ export const dataStore = createStore<DataState>()((set) => ({
     }
   },
 
-  cancelLoad: () => loadController?.abort(new DOMException('Load cancelled', 'AbortError')),
+  cancelLoad: () =>
+    loadController?.abort(new DOMException(ERROR_MESSAGE.LOAD_CANCELLED, 'AbortError')),
 
   reset: () => set({ dataset: null, error: null }),
 }))

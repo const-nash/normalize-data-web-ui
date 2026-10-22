@@ -7,7 +7,8 @@ Functional core, imperative shell.
 - `src/worker`: the import worker and its typed message protocol. The protocol is the stand-in for a future backend API.
 - `src/store`: Zustand. Holds the dataset and the load state, and owns the load flow.
 - `src/ui`: React components. They read from the store through selectors and call store actions.
-- `src/domain`: pure types and rules. For now only the `CustomerRow` type and the column list.
+- `src/domain`: pure types and rules. For now the `CustomerRow` type, the column list and the import file check.
+- `src/constants`: shared constants: file extensions, byte sizes and all error texts. Error texts are templates with `{name}` placeholders, filled in by `formatMessage`. Placeholder names are inferred from the template, so a missing or extra parameter is a type error.
 - `src/mock`: temporary mock rows and a simulated load. Removed once the real import is wired up.
 
 ### Grid
@@ -70,7 +71,7 @@ Why: 200,000 rows fit easily in main thread memory. Edits, undo and index based 
 ## Assumptions
 
 - The first row is the header.
-- Supported extensions: csv, tsv, txt.
+- Supported extensions: csv, tsv, txt. Empty files and files above 100 MB are rejected. The check runs in the store for both the file picker and drag and drop, because drag and drop ignores the `accept` attribute.
 - Parsing is a naive comma split for now (`src/worker/naiveParser.ts`). PapaParse replaces it in the next step.
 
 ## Dependencies
@@ -82,6 +83,7 @@ Why: 200,000 rows fit easily in main thread memory. Edits, undo and index based 
 - tailwindcss, @tailwindcss/vite: utility styling, required by the brief.
 - oxlint: fast linter from the Vite template.
 - prettier: consistent formatting.
+- vitest: unit tests for `src/domain`, shares the Vite config.
 - prettier-plugin-tailwindcss: stable class order, which keeps diffs small.
 
 ## AI note

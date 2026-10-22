@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ChangeEvent } from 'react'
+import { MAX_FILE_MB } from '../domain/importFile'
 
 interface DropzoneProps {
   accept: string
@@ -94,7 +95,7 @@ export function Dropzone({ accept, disabled = false, onFile }: DropzoneProps) {
         {isDragging ? 'Drop the file to start' : 'Choose a file or drag it here'}
       </span>
       <span className="text-sm text-zinc-500 dark:text-zinc-400">
-        CSV, TSV or TXT with a header row
+        CSV, TSV or TXT with a header row, up to {MAX_FILE_MB} MB
       </span>
     </label>
   )

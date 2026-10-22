@@ -1,3 +1,4 @@
+import { ERROR_MESSAGE } from '../constants/errorMessages'
 import type {
   Chunk,
   ClientMessage,
@@ -41,7 +42,9 @@ export class WorkerClient {
   constructor(worker: Worker) {
     this.worker = worker
     worker.addEventListener('message', (e: MessageEvent<WorkerMessage>) => this.handle(e.data))
-    worker.addEventListener('error', (e) => this.failAll(new Error(e.message || 'Worker crashed')))
+    worker.addEventListener('error', (e) =>
+      this.failAll(new Error(e.message || ERROR_MESSAGE.WORKER_CRASHED)),
+    )
   }
 
   request<M extends Method>(
@@ -76,7 +79,7 @@ export class WorkerClient {
 
   terminate() {
     this.worker.terminate()
-    this.failAll(new Error('Worker terminated'))
+    this.failAll(new Error(ERROR_MESSAGE.WORKER_TERMINATED))
   }
 
   private post(message: ClientMessage, transfer: Transferable[] = []) {

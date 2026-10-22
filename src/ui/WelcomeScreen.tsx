@@ -1,8 +1,8 @@
+import { ACCEPT_ATTRIBUTE } from '../domain/importFile'
 import { useDataStore } from '../store/useDataStore'
 import type { LoadProgress } from '../worker/protocol'
 import { Dropzone } from './Dropzone'
 
-const ACCEPT = '.csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain'
 // Share of the bar for parsing; validation fills the rest, so the bar never jumps back
 const PARSING_SHARE = 0.6
 
@@ -39,7 +39,7 @@ export function WelcomeScreen() {
 
         <div className="w-full" style={{ viewTransitionName: 'app-surface' }}>
           <Dropzone
-            accept={ACCEPT}
+            accept={ACCEPT_ATTRIBUTE}
             disabled={progress !== null}
             onFile={(file) => void loadFile(file)}
           />

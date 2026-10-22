@@ -1,4 +1,5 @@
 /// <reference lib="webworker" />
+import { ERROR_MESSAGE } from '../constants/errorMessages'
 import { createNaiveParser } from './naiveParser'
 import type {
   Chunk,
@@ -87,7 +88,7 @@ const handlers: Handlers = {
       reader.releaseLock()
     }
 
-    if (!columns) throw new Error('The file appears to be empty or has no header row.')
+    if (!columns) throw new Error(ERROR_MESSAGE.FILE_NO_HEADER)
     if (batch.length > 0) chunk(batch)
 
     return { columns, rowCount }
