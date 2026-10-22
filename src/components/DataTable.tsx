@@ -19,9 +19,12 @@ export function DataTable() {
   const gridTemplateColumns = `repeat(${columns.length}, minmax(140px, 1fr))`
 
   return (
-    <div ref={parentRef} className="h-full overflow-auto rounded border border-gray-200">
+    <div
+      ref={parentRef}
+      className="h-full overflow-auto rounded-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900"
+    >
       <div
-        className="sticky top-0 z-10 grid border-b border-gray-200 bg-gray-50 text-sm font-semibold"
+        className="sticky top-0 z-10 grid border-b border-zinc-200 bg-zinc-50 text-sm font-semibold dark:border-zinc-800 dark:bg-zinc-800"
         style={{ gridTemplateColumns }}
       >
         {columns.map((col) => (
@@ -36,7 +39,7 @@ export function DataTable() {
           return (
             <div
               key={item.key}
-              className="absolute left-0 grid w-full border-b border-gray-100 text-sm"
+              className="absolute left-0 grid w-full border-b border-zinc-100 text-sm dark:border-zinc-800/60"
               style={{
                 gridTemplateColumns,
                 height: item.size,
