@@ -3,31 +3,16 @@ import { useEffect, useMemo, useState } from 'react'
 import { QUICK_FILTER } from '../domain/filter'
 import type { QuickFilter } from '../domain/filter'
 import { useDataStore } from '../store/useDataStore'
-import type { Dataset } from '../store/useDataStore'
 import { useShownDataset } from './useShownDataset'
 
 const SEARCH_DEBOUNCE_MS = 250
 
-interface QuickFilterOption {
-  value: QuickFilter
-  label: string
-  count: (counts: Dataset['statusCounts']) => number
-}
-
-const OPTIONS: QuickFilterOption[] = [
-  {
-    value: QUICK_FILTER.ALL,
-    label: 'All',
-    count: (c) => c.valid + c.fixable + c.manual,
-  },
-  {
-    value: QUICK_FILTER.WITH_ISSUES,
-    label: 'With issues',
-    count: (c) => c.fixable + c.manual,
-  },
-  { value: QUICK_FILTER.MANUAL, label: 'Needs manual fix', count: (c) => c.manual },
-  { value: QUICK_FILTER.FIXABLE, label: 'Auto-fixable', count: (c) => c.fixable },
-  { value: QUICK_FILTER.VALID, label: 'Only valid', count: (c) => c.valid },
+const OPTIONS: Array<{ value: QuickFilter; label: string }> = [
+  { value: QUICK_FILTER.ALL, label: 'All' },
+  { value: QUICK_FILTER.WITH_ISSUES, label: 'With issues' },
+  { value: QUICK_FILTER.MANUAL, label: 'Needs manual fix' },
+  { value: QUICK_FILTER.FIXABLE, label: 'Auto-fixable' },
+  { value: QUICK_FILTER.VALID, label: 'Only valid' },
 ]
 
 export function FilterBar() {
@@ -69,7 +54,7 @@ export function FilterBar() {
       />
       <fieldset className="flex flex-wrap gap-2">
         <legend className="sr-only">Quick filters</legend>
-        {OPTIONS.map(({ value, label, count }) => (
+        {OPTIONS.map(({ value, label }) => (
           <button
             key={value}
             type="button"
@@ -78,9 +63,6 @@ export function FilterBar() {
             className="flex h-10 items-center gap-2 rounded-lg border border-zinc-300 px-3 text-sm font-medium transition-colors hover:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none aria-pressed:border-indigo-500 aria-pressed:bg-indigo-50 aria-pressed:text-indigo-700 dark:border-zinc-700 dark:hover:bg-zinc-800 dark:aria-pressed:border-indigo-400 dark:aria-pressed:bg-indigo-950/50 dark:aria-pressed:text-indigo-300"
           >
             {label}
-            <span className="text-xs text-zinc-500 tabular-nums dark:text-zinc-400">
-              {count(dataset.statusCounts).toLocaleString()}
-            </span>
           </button>
         ))}
       </fieldset>
